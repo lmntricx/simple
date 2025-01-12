@@ -1,0 +1,23 @@
+#dashboard-main {
+    display: flex;
+    flex-direction: row; /* Default: items in a row */
+    justify-content: flex-start;
+
+}
+#dashboard-main>div {
+    height: 100vh;
+    position: fixed;
+    top: 0;
+    z-index: 9;
+    padding: 90px 10px 10px;
+}
+#dashboard-main>#side-bar {
+    width: 19vw;
+    left: 0;
+    background-color: #000000;
+}
+#dashboard-main>#main-div {
+    width: 80vw;
+    right: 0;
+    padding: 90px 10px 10px;
+}
