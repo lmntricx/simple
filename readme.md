@@ -1,4 +1,4 @@
-# Sample PHP App
+# Simple PHP Framework V 1.0
 
 This is a sample PHP application with an organized structure for a medium-sized project.
 
