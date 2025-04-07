@@ -9,8 +9,8 @@ require_once 'config/app.php';
 use app\Managers\SchemaManager;
 
 // Create database schema if necessary
-$schemaManager = new SchemaManager();
-$schemaManager->createTables();
+# $schemaManager = new SchemaManager();
+# $schemaManager->createTables();
 
 
 try {
