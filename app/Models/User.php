@@ -6,6 +6,11 @@ use core\Database;
 
 class User
 {
+    public static function usersSchema(){
+        $db = Database::getInstance();
+        $stmt = $db->prepare('');
+
+    }
     public static function findByEmail($email)
     {
         $db = Database::getInstance();
