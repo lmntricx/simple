@@ -4,6 +4,7 @@ return [
         '/' => 'HomeController@index',
     ],
     'POST' => [
+        'board' => ''
     ],
 ];
 

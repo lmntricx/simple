@@ -1,14 +1,13 @@
 <?php
+
 namespace app\Controllers;
 
-use app\Middleware;
-//use app\Services;
+use app\Services;
 
-class HomeController {
+class BoardingController
+{
     public function __construct() {
         header("Content-type:application/json");
-        // Check if the user is logged in
-        // Middleware\AuthMiddleware::check();
     }
 
     public function index() {
@@ -16,11 +15,11 @@ class HomeController {
             "Status"=>"Success",
             "IpAddress"=>$_SERVER['REMOTE_ADDR'],
             "Response Code"=>200,
-//            "Host"=>$_SERVER['REMOTE_HOST'],
             "Port"=>$_SERVER['REMOTE_PORT'],
             "Message"=>"The API is healthy"
         );
 
         echo(json_encode($server));
     }
+
 }
