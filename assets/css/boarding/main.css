@@ -1,0 +1,64 @@
+body {
+    background-color: black;
+}
+#sign-up-main, #sign-in-main {
+    background-color: black;
+}
+#sign-up-main>#sign-up-header, #sign-in-main>#sign-in-header{
+    padding: 30px 25px;
+    background-color: #ffffff;
+    border-bottom-left-radius: 50px;
+}
+#sign-up-main>#sign-up-header>#back-arrow-container, #sign-in-main>#sign-in-header>#back-arrow-container {
+    padding: 25px 0;
+}
+#sign-up-main>#sign-up-header>#back-arrow-container>a, #sign-in-main>#sign-in-header>#back-arrow-container>a {
+    color: black;
+}
+#sign-up-main>#sign-up-header>h3, #sign-in-main>#sign-in-header>h3 {
+    font-weight: bolder;
+}
+
+#sign-up-main>form, #sign-in-main>form {
+    margin-top: 25px;
+    padding: 0 25px 55px;
+}
+#sign-in-main>form {
+    margin-top: 80px;
+}
+#sign-up-main>form>label, #sign-in-main>form>label {
+    display: block;
+    width: 100%;
+    color: #f4f4f4;
+}
+#sign-up-main>form>label>input, #sign-in-main>form>label>input {
+    display: block;
+    width: 100%;
+    border: none;
+    outline: none;
+    padding: 20px 20px 10px;
+    background-color: unset;
+    border-bottom: 2px solid #777777;
+    color: #fff;
+    font-size: 13pt;
+}
+#sign-up-main>form>label>input:focus, #sign-in-main>form>label>input:focus {
+    border-bottom-color: #fff;
+}
+
+#sign-up-main>form>label>input[type='submit'], #sign-in-main>form>label>input[type='submit'] {
+    margin-top: +15px;
+    margin-bottom: +30px;
+    border: none;
+    background-color: #f4f4f4;
+    color: black;
+    border-radius: 3px;
+}
+#sign-in-main>form>label>input[type='submit'] {
+    margin-top: 40px;
+    margin-bottom: 50px;
+}
+#sign-up-main>form>p, #sign-in-main>form>p {
+    margin: +30px 0;
+    color: #f4f4f4;
+}

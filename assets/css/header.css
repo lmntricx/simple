@@ -1,0 +1,30 @@
+#main-header {
+    background-color: black;
+    color: #f4f4f4;
+}
+
+#menu-btn{
+    display: block;
+    text-align: center;
+    font-size: 20pt;
+    padding: 20px;
+    border-bottom: 1px solid #333333;
+}
+
+#main-menu{
+    display: none;
+    padding: 20px 0;
+    text-align: center;
+    align-content: center;
+    justify-content: center;
+    flex-direction: column;
+}
+
+#main-menu>a {
+    padding: 18px;
+    font-size: 12pt;
+    text-transform: uppercase;
+    color: #e4e4e4;
+    text-decoration: none;
+    letter-spacing: 1px;
+}

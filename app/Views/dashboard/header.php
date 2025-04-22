@@ -16,9 +16,11 @@
         MENU
     </div>
     <menu id="main-menu" class="">
-        <a href="/sign-in">Sign In</a>
-        <a href="/sign-up">Sign Up</a>
-        <a href="">About</a>
-        <a href="">Contact</a>
+        <a href="">Notifications</a>
+<!--        <a href="">Messages</a>-->
+        <a href="">Structure</a>
+        <a href="">Wallet</a>
+        <a href="">User</a>
+        <a href="">Log Out</a>
     </menu>
 </header>

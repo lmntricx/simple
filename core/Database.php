@@ -11,7 +11,7 @@ class Database
     private string $dbHost = "localhost"; # your database host
     protected static string $dbPassword = "root"; # your database password
 
-    public static function getInstance(string $dbName = 'database', string $host = 'localhost', string $user = 'root', string $password = "root"): PDO
+    public static function getInstance(string $dbName = 'mlm_db', string $host = 'localhost', string $user = 'root', string $password = ""): PDO
     {
         $key = "$host:$dbName"; // Unique key for each database connection
 

@@ -20,18 +20,46 @@ class SchemaManager
             // Table: users
             "CREATE TABLE IF NOT EXISTS users (
                 id INT AUTO_INCREMENT PRIMARY KEY,
-                username VARCHAR(255) NOT NULL UNIQUE,
-                password_hash VARCHAR(255) NOT NULL,
+                referral_code VARCHAR(255) NOT NULL,
+                first_name VARCHAR(255) NOT NULL,
+                last_name VARCHAR(255) NOT NULL,
                 email VARCHAR(255) NOT NULL UNIQUE,
+                phone_number VARCHAR(255) NOT NULL UNIQUE,
+                password_hash VARCHAR(255) NOT NULL UNIQUE,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )",
 
-            // Table: posts
-            "CREATE TABLE IF NOT EXISTS posts (
+            // Table: personal info
+            "CREATE TABLE IF NOT EXISTS personal_info (
                 id INT AUTO_INCREMENT PRIMARY KEY,
-                title VARCHAR(255) NOT NULL,
-                content TEXT NOT NULL,
+                user_id INT NOT NULL UNIQUE,
+                id_number VARCHAR(255) NOT NULL UNIQUE,
+                
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (user_id) REFERENCES users(id)
+            )",
+
+            // Table: banking info
+            "CREATE TABLE IF NOT EXISTS banking_info (
+                id INT AUTO_INCREMENT PRIMARY KEY,
                 user_id INT NOT NULL,
+                bank_name VARCHAR(255) NOT NULL,
+                account_number VARCHAR(255) NOT NULL,
+                account_type VARCHAR(255) NOT NULL,
+                account_holder VARCHAR(255) NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (user_id) REFERENCES users(id)
+            )",
+
+            // Table: locale
+            "CREATE TABLE IF NOT EXISTS locale_info (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                user_id INT NOT NULL,
+                country VARCHAR(255) NOT NULL,
+                state VARCHAR(255) NOT NULL,
+                city VARCHAR(255) NOT NULL,
+                town VARCHAR(255) NOT NULL,
+                stree_address  VARCHAR(255) NOT NULL,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 FOREIGN KEY (user_id) REFERENCES users(id)
             )"

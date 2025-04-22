@@ -15,5 +15,9 @@ main[id='sample-main'] {
 header, footer {
     background-color: #f4f4f4;
     text-align: center;
-    padding: 1em;
+}
+footer {
+    padding: 45px 15px;
+    background-color: black;
+    color: #f4f4f4;
 }
