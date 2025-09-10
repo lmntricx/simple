@@ -2,62 +2,37 @@
 
 namespace app\Controllers;
 
-use app\Services\boardingService;
+use app\Services\BoardingService;
+use app\Helpers\ResponseHelper;
 
 class BoardingController
 {
-    public function __construct() {
-//        session_start();
-//        header("Content-type:application/json");
+    public function __construct()
+    {
+        //        session_start();
+        //        header("Content-type:application/json");
+        ResponseHelper::post_method_check();
     }
 
-    public function index(): void{
-        $server = array(
-            "Status"=>"Success",
-            "IpAddress"=>$_SERVER['REMOTE_ADDR'],
-            "Response Code"=>200,
-            "Port"=>$_SERVER['REMOTE_PORT'],
-            "Message"=>"The API is healthy"
-        );
-
-        echo(json_encode($server));
+    public function index(): void
+    {
+        echo "arg1";
     }
 
-    public function sign_in_form(): void {
-        include "app/views/boarding/header.php";
-        include "app/views/boarding/sign_in.php";
-        include "app/views/boarding/footer.php";
-    }
+    public function sign_in(): void
+    {
+        if (!isset($_POST["user_name"]) or !isset($_POST["password"])) {
+            $status = "failed";
+            $message = "Please input real user credentials";
+            $status_code = 400;
+            $data = [];
+            ResponseHelper::error("error", $status_code, $data);
+        }
 
-    public function sign_up_form(): void {
-
-        include "app/views/boarding/header.php";
-        include "app/views/boarding/sign_up.php";
-        include "app/views/boarding/footer.php";
-    }
-
-    public  function sign_in():void {
-        if($_SERVER['REQUEST_METHOD'] === 'POST') {
-            if(boardingService::userLogin()){
-                header("Location:/dashboard");
-            }else{
-                header("Location:/sign-in?e=invalid");
-            }
-        }else{
-            header("Location:/sign-in");
+        if (BoardingService::userLogin()) {
+            ResponseHelper::success();
         }
     }
 
-    public function sign_up(): void {
-        if($_SERVER['REQUEST_METHOD'] === 'POST') {
-            if(boardingService::registerUser()){
-                header("Location:/dashboard");
-            }else{
-                header("Location:/sign-up");
-            }
-        }else{
-            header("Location:/sign-up");
-        }
-    }
-
+    public function sign_up(): void {}
 }

@@ -8,4 +8,4 @@ function env($key, $default = null) {
 }
 
 define('APP_NAME', env('APP_NAME', 'MyApp'));
-define('APP_ENV', env('APP_ENV', 'production'));
+define('APP_ENV', env('APP_ENV', 'development'));

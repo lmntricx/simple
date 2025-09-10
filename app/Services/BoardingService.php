@@ -6,7 +6,7 @@ use core\Database;
 use app\Models;
 
 
-class boardingService
+class BoardingService
 {
     private static function addToDatabase():bool {
         return true;

@@ -20,48 +20,54 @@ class SchemaManager
             // Table: users
             "CREATE TABLE IF NOT EXISTS users (
                 id INT AUTO_INCREMENT PRIMARY KEY,
-                referral_code VARCHAR(255) NOT NULL,
-                first_name VARCHAR(255) NOT NULL,
-                last_name VARCHAR(255) NOT NULL,
-                email VARCHAR(255) NOT NULL UNIQUE,
-                phone_number VARCHAR(255) NOT NULL UNIQUE,
-                password_hash VARCHAR(255) NOT NULL UNIQUE,
+                username VARCHAR(100) NOT NULL UNIQUE,
+                password_hash VARCHAR(255) NOT NULL,
+                email VARCHAR(150) NOT NULL UNIQUE,
+                role ENUM('admin', 'user') DEFAULT 'admin',
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )",
 
             // Table: personal info
-            "CREATE TABLE IF NOT EXISTS personal_info (
+            "CREATE TABLE IF NOT EXISTS qrcodes (
                 id INT AUTO_INCREMENT PRIMARY KEY,
-                user_id INT NOT NULL UNIQUE,
-                id_number VARCHAR(255) NOT NULL UNIQUE,
-                
+                type ENUM('static', 'dynamic') NOT NULL,
+                short_code VARCHAR(50) NOT NULL UNIQUE,
+                original_url TEXT,
+                redirect_url TEXT,
+                custom_design JSON NULL,
+                expiration_date TIMESTAMP NULL,
+                password VARCHAR(255) NULL,
+                created_by INT NOT NULL,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                FOREIGN KEY (user_id) REFERENCES users(id)
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+                FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE CASCADE
             )",
 
             // Table: banking info
-            "CREATE TABLE IF NOT EXISTS banking_info (
+            "CREATE TABLE IF NOT EXISTS scan_logs (
                 id INT AUTO_INCREMENT PRIMARY KEY,
-                user_id INT NOT NULL,
-                bank_name VARCHAR(255) NOT NULL,
-                account_number VARCHAR(255) NOT NULL,
-                account_type VARCHAR(255) NOT NULL,
-                account_holder VARCHAR(255) NOT NULL,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                FOREIGN KEY (user_id) REFERENCES users(id)
+                qr_id INT NOT NULL,
+                scanned_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                ip_address VARCHAR(45),
+                user_agent TEXT,
+                device_type VARCHAR(50),
+                os VARCHAR(50),
+                browser VARCHAR(50),
+                location_country VARCHAR(100),
+                location_city VARCHAR(100),
+                FOREIGN KEY (qr_id) REFERENCES qrcodes(id) ON DELETE CASCADE
             )",
 
             // Table: locale
-            "CREATE TABLE IF NOT EXISTS locale_info (
+            "CREATE TABLE IF NOT EXISTS qr_versions (
                 id INT AUTO_INCREMENT PRIMARY KEY,
-                user_id INT NOT NULL,
-                country VARCHAR(255) NOT NULL,
-                state VARCHAR(255) NOT NULL,
-                city VARCHAR(255) NOT NULL,
-                town VARCHAR(255) NOT NULL,
-                stree_address  VARCHAR(255) NOT NULL,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                FOREIGN KEY (user_id) REFERENCES users(id)
+                qr_id INT NOT NULL,
+                old_url TEXT,
+                new_url TEXT,
+                changed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                changed_by INT,
+                FOREIGN KEY (qr_id) REFERENCES qrcodes(id) ON DELETE CASCADE,
+                FOREIGN KEY (changed_by) REFERENCES users(id) ON DELETE SET NULL
             )"
         ];
 
