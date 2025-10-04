@@ -1,10 +1,13 @@
 <IfModule mod_rewrite.c>
   RewriteEngine On
-  RewriteBase /api/
 
-  # Route everything to index.php
+  # Exclude API requests from React routing
+  RewriteCond %{REQUEST_URI} ^/api
+  RewriteRule ^ - [L]
+
+  # React SPA fallback
   RewriteCond %{REQUEST_FILENAME} !-f
   RewriteCond %{REQUEST_FILENAME} !-d
-  RewriteRule ^ index.php [QSA,L]
+  RewriteRule . /index.html [L]
 </IfModule>
 
