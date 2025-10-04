@@ -1,49 +1,56 @@
 <?php
-// Start session
+// ========================================
+// Bootstrap & Config
+// ========================================
+
+// Load environment & configs
+require_once __DIR__ . '/config/errors.php';
+require_once __DIR__ . '/config/cors.php';
+
 session_start();
+require_once __DIR__ . '/autoloader.php';
+require_once __DIR__ . '/config/app.php';
 
-// Load required files
-require_once 'autoloader.php';
-require_once 'config/app.php';
-
-use app\Managers\SchemaManager;
-
-// Create database schema if necessary
-$schemaManager = new SchemaManager();
-$schemaManager->createTables();
-
+// ========================================
+// Routing
+// ========================================
 try {
-    // Load routes
-    $routes = require 'config/routes.php';
+    $routes = require __DIR__ . '/config/routes.php';
 
-    // Parse URI and HTTP method
-    $uri = parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH);
-    $method = $_SERVER['REQUEST_METHOD'];
+    $uri = parse_url($_SERVER["REQUEST_URI"], PHP_URL_PATH);
+    $method = $_SERVER["REQUEST_METHOD"];
 
-    // Check if the route exists
+    // API prefix handling
+    $basePrefix = '/api';
+    if (strpos($uri, $basePrefix) === 0) {
+        $uri = substr($uri, strlen($basePrefix));
+        if ($uri === '') $uri = '/';
+    }
+
     if (isset($routes[$method][$uri])) {
-        [$controller, $action] = explode('@', $routes[$method][$uri]);
-        $controllerClass = 'app\\Controllers\\' . $controller;
+        [$controller, $action] = explode("@", $routes[$method][$uri]);
+        $controllerClass = "app\\Controllers\\" . $controller;
 
-        if (class_exists($controllerClass)) {
-            $controllerInstance = new $controllerClass();
-
-            if (method_exists($controllerInstance, $action)) {
-                // Call the action
-                $controllerInstance->$action();
-            } else {
-                throw new Exception("Method '$action' not found in controller '$controllerClass'.");
-            }
-        } else {
+        if (!class_exists($controllerClass)) {
             throw new Exception("Controller '$controllerClass' not found.");
         }
+
+        $controllerInstance = new $controllerClass();
+
+        if (!method_exists($controllerInstance, $action)) {
+            throw new Exception("Method '$action' not found in controller '$controllerClass'.");
+        }
+
+        $controllerInstance->$action();
+
     } else {
-        // Route not found
         http_response_code(404);
-        echo '404 Not Found';
+        echo json_encode(["error" => "404 Not Found"]);
     }
 } catch (Exception $e) {
-    // Handle any errors gracefully
     http_response_code(500);
-    echo '500 Internal Server Error: ' . $e->getMessage();
+    echo json_encode([
+        "error" => "500 Internal Server Error",
+        "message" => $e->getMessage()
+    ]);
 }
