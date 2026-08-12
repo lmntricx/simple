@@ -1,84 +1,100 @@
 <?php
+
 namespace app\Helpers;
 
 class ResponseHelper
 {
-    public static function post_method_check(): void
-    {
-        if ($_SERVER["REQUEST_METHOD"] != "POST") {
-            $status = "failed";
-            $message = "Unacceptable request method";
-            $status_code = 405;
-            $data = [];
-            self::json($status, $message, $data, $status_code);
-        }
-    }
-
-    public static function get_method_check(): void
-    {
-        if ($_SERVER["REQUEST_METHOD"] != "GET") {
-            $status = "failed";
-            $message = "Unacceptable request method";
-            $status_code = 405;
-            $data = [];
-            self::json($status, $message, $data, $status_code);
-        }
-    }
-
-    public static function json(
-        $status = "success",
-        $message = "",
-        $data = [],
-        $code = 200,
+    private function send(
+        string $status,
+        string $message,
+        mixed $data = null,
+        int $code = 200,
+        array $meta = []
     ): void {
-        // ================================
-        // CORS Headers
-        // ================================
-        // Allow requests from your React frontend
-        header("Access-Control-Allow-Origin: http://localhost:5173");
-        header("Access-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS");
-        header("Access-Control-Allow-Headers: Content-Type, Authorization");
-        header("Access-Control-Allow-Credentials: true"); // required for PHP sessions
-
-        // Handle preflight OPTIONS request
-        if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
-            http_response_code(200);
-            exit();
-        }
-        // ================================
-
         http_response_code($code);
-        header("Content-Type: application/json");
+        header('Content-Type: application/json; charset=utf-8');
 
-        echo json_encode([
-            "status" => $status,
-            "message" => $message,
-            "data" => $data,
-        ]);
+        $payload = [
+            'status' => $status,
+            'message' => $message,
+        ];
+
+        if ($data !== null) {
+            $payload['data'] = $data;
+        }
+
+        if (!empty($meta)) {
+            $payload['meta'] = $meta;
+        }
+
+        echo json_encode($payload, JSON_UNESCAPED_UNICODE);
         exit();
     }
 
-    public static function success(
-        $data = [],
-        $message = "Success",
-        $code = 200,
+    public function success(
+        mixed $data = null,
+        string $message = 'Success',
+        int $code = 200,
+        array $meta = []
     ): void {
-        self::json("success", $message, $data, $code);
+        $this->send('success', $message, $data, $code, $meta);
     }
 
-    public static function not_found(
-        $data = [],
-        $message = "Not found",
-        $code = 404,
+    public function created(
+        mixed $data = null,
+        string $message = 'Created',
+        int $code = 201,
+        array $meta = []
     ): void {
-        self::json("Not found", $message, $data, $code);
+        $this->send('success', $message, $data, $code, $meta);
     }
 
-    public static function error(
-        $message = "Error",
-        $code = 400,
-        $errors = [],
+    public function noContent(): void
+    {
+        http_response_code(204);
+        exit();
+    }
+
+    public function error(
+        string $message = 'Error',
+        int $code = 400,
+        mixed $errors = null,
+        array $meta = []
     ): void {
-        self::json("error", $message, $errors, $code);
+        $payload = $errors !== null ? ['errors' => $errors] : null;
+        $this->send('error', $message, $payload, $code, $meta);
+    }
+
+    public function validationError(
+        array $errors,
+        string $message = 'Validation failed'
+    ): void {
+        $this->error($message, 422, $errors);
+    }
+
+    public function notFound(
+        string $message = 'Not found',
+        mixed $data = null
+    ): void {
+        $this->send('error', $message, $data, 404);
+    }
+
+    public function unauthorized(
+        string $message = 'Unauthorized'
+    ): void {
+        $this->send('error', $message, null, 401);
+    }
+
+    public function forbidden(
+        string $message = 'Forbidden'
+    ): void {
+        $this->send('error', $message, null, 403);
+    }
+
+    public function requireMethod(string $method): void
+    {
+        if ($_SERVER['REQUEST_METHOD'] !== strtoupper($method)) {
+            $this->error('Method not allowed', 405);
+        }
     }
 }
