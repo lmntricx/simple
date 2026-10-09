@@ -14,6 +14,13 @@ return [
     'key' => env('APP_KEY', ''),
     'timezone' => env('APP_TIMEZONE', 'UTC'),
 
+    // Proxies / load balancers in front of the app, so Request::ip() returns the real client IP
+    // (which rate limiting depends on). Comma-separated IPs or CIDR ranges, or "*" when every
+    // request arrives through a proxy you control (e.g. most PaaS hosts). Behind Cloudflare,
+    // list Cloudflare's ranges: https://www.cloudflare.com/ips/
+    // Leave empty if clients connect directly, or anyone could fake their IP.
+    'trusted_proxies' => array_filter(explode(',', (string) env('TRUSTED_PROXIES', ''))),
+
     // Prefix for every route in routes/api.php, e.g. "api" => /api/users
     'route_prefix' => env('APP_ROUTE_PREFIX', ''),
 

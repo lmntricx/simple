@@ -11,6 +11,7 @@ use Simple\Http\Pipeline;
 use Simple\Http\Request;
 use Simple\Http\Response;
 use Simple\Http\Router;
+use Simple\Http\TrustedProxies;
 use Simple\Support\Config;
 use Simple\Support\Env;
 use Simple\Support\Log;
@@ -38,6 +39,7 @@ class Application
         date_default_timezone_set($this->config->get('app.timezone', 'UTC'));
         Log::useFile($basePath . '/storage/logs/simple.log');
         Connection::configure($this->config->get('database', []));
+        TrustedProxies::set($this->config->get('app.trusted_proxies', []));
 
         $this->router = new Router();
         foreach ($this->config->get('app.middleware_aliases', []) as $name => $class) {

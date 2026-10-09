@@ -150,9 +150,52 @@ class Request
         return is_array($file) && ($file['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_NO_FILE ? $file : null;
     }
 
+    /**
+     * The client's IP address.
+     *
+     * Behind a load balancer / CDN, REMOTE_ADDR is the proxy, not the client.
+     * If REMOTE_ADDR is a trusted proxy (config app.trusted_proxies), the
+     * X-Forwarded-For chain is read from the right, skipping trusted proxies,
+     * and the first untrusted address is the client. Untrusted senders can't
+     * spoof their IP, because their X-Forwarded-For is ignored.
+     */
     public function ip(): ?string
     {
-        return $this->server['REMOTE_ADDR'] ?? null;
+        $remote = $this->server['REMOTE_ADDR'] ?? null;
+
+        if ($remote === null || !TrustedProxies::isTrusted($remote)) {
+            return $remote;
+        }
+
+        $forwarded = array_filter(array_map('trim', explode(',', (string) $this->header('x-forwarded-for', ''))));
+
+        foreach (array_reverse($forwarded) as $ip) {
+            if (filter_var($ip, FILTER_VALIDATE_IP) === false) {
+                break; // Malformed chain: stop rather than trust anything further left.
+            }
+            if (!TrustedProxies::isTrusted($ip)) {
+                return $ip;
+            }
+            $remote = $ip;
+        }
+
+        return $remote;
+    }
+
+    /**
+     * Whether the client connected over HTTPS (honours X-Forwarded-Proto from trusted proxies).
+     */
+    public function isSecure(): bool
+    {
+        $remote = $this->server['REMOTE_ADDR'] ?? null;
+
+        if ($remote !== null && TrustedProxies::isTrusted($remote) && ($proto = $this->header('x-forwarded-proto')) !== null) {
+            return strtolower(trim(explode(',', $proto)[0])) === 'https';
+        }
+
+        $https = $this->server['HTTPS'] ?? '';
+
+        return $https !== '' && strtolower((string) $https) !== 'off';
     }
 
     public function server(string $key, mixed $default = null): mixed
