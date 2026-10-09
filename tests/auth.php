@@ -33,7 +33,11 @@ function call(string $method, string $path, array $body = [], ?string $token = n
         $headers['authorization'] = "Bearer $token";
     }
 
-    $response = $app->handle(new Request($method, $path, [], $body, $headers, [], ['REMOTE_ADDR' => $ip]));
+    [$path, $query] = array_pad(explode('?', $path, 2), 2, '');
+    parse_str($query, $queryParams);
+
+    $response = $app->handle(new Request($method, $path, $queryParams, $body, $headers, [], ['REMOTE_ADDR' => $ip]));
+    $app->terminate(); // run deferred work (emails)
 
     return [$response->status(), json_decode($response->content(), true), $response];
 }
@@ -232,6 +236,216 @@ test('login is throttled after 10 attempts per minute per IP', function () {
     eq(true, (int) $response->headers()['Retry-After'] > 0);
 
     eq(200, call('POST', '/auth/login', ['email' => 'ada@x.io', 'password' => 'password123'], ip: '192.0.2.51')[0], 'other IP');
+});
+
+/**
+ * The first link in the last email sent to $email, as an app-relative path + query.
+ */
+function linkFromEmail(string $email): string
+{
+    global $mail;
+    $messages = $mail->sentTo($email);
+    eq(true, $messages !== [], "an email was sent to $email");
+    preg_match('#https?://[^\s]+#', end($messages)->text, $m);
+    return substr($m[0], strlen('http://simple.test'));
+}
+
+function tamper(string $link, string $param, string $value): string
+{
+    [$path, $query] = explode('?', $link, 2);
+    parse_str($query, $params);
+    $params[$param] = $value;
+    return $path . '?' . http_build_query($params);
+}
+
+section('Email verification');
+
+test('registering sends a signed verification link; the user starts unverified', function () {
+    global $mail;
+    $mail->clear();
+    register('Vera', 'vera@x.io');
+
+    $messages = $mail->sentTo('vera@x.io');
+    eq(1, count($messages));
+    eq(true, str_contains($messages[0]->subject, 'Verify'));
+    eq(true, str_contains($messages[0]->html, '<a href="http://simple.test/auth/verify-email/'));
+    eq(null, User::firstWhere('email', 'vera@x.io')->email_verified_at);
+});
+
+test('the verification link verifies the email', function () {
+    [$status] = call('GET', linkFromEmail('vera@x.io'));
+    eq(200, $status);
+    eq(true, User::firstWhere('email', 'vera@x.io')->email_verified_at !== null);
+});
+
+test('tampered, re-pointed or expired links are rejected', function () {
+    global $mail;
+    register('Tom', 'tom@x.io');
+    $link = linkFromEmail('tom@x.io');
+    $tomId = User::firstWhere('email', 'tom@x.io')->id;
+    $veraId = User::firstWhere('email', 'vera@x.io')->id;
+
+    eq(403, call('GET', tamper($link, 'signature', str_repeat('0', 64)))[0], 'forged signature');
+    eq(403, call('GET', tamper($link, 'expires', (string) (time() + 99999)))[0], 'extended expiry');
+    eq(403, call('GET', str_replace("/verify-email/$tomId/", "/verify-email/$veraId/", $link))[0], 'other user id');
+    eq(403, call('GET', explode('?', $link)[0])[0], 'no signature at all');
+
+    // A genuinely signed link that has expired.
+    $expired = Simple\Http\UrlSigner::sign(explode('?', $link)[0], [], time() - 1);
+    eq(403, call('GET', substr($expired, strlen('http://simple.test')))[0], 'expired');
+
+    eq(null, User::find($tomId)->email_verified_at);
+});
+
+test('verified middleware blocks unverified users', function () {
+    global $app;
+    $app->router->group(['middleware' => ['auth', 'verified']], function ($router) {
+        $router->get('/test-verified', fn () => Response::success('ok'));
+    });
+
+    [, , $response] = call('POST', '/auth/login', ['email' => 'tom@x.io', 'password' => 'password123'], ip: uniqid());
+    $tomToken = json_decode($response->content(), true)['data']['token'];
+    [, $json] = call('POST', '/auth/login', ['email' => 'vera@x.io', 'password' => 'password123'], ip: uniqid());
+
+    eq(403, call('GET', '/test-verified', token: $tomToken)[0], 'unverified');
+    eq(200, call('GET', '/test-verified', token: $json['data']['token'])[0], 'verified');
+});
+
+test('resend verification email (and not when already verified)', function () {
+    global $mail;
+    $tom = User::firstWhere('email', 'tom@x.io');
+    $token = $tom->createToken('t')->plainTextToken;
+
+    $mail->clear();
+    [$status, $json] = call('POST', '/auth/email/verification-notification', token: $token);
+    eq(200, $status);
+    eq(1, count($mail->sentTo('tom@x.io')));
+
+    eq(200, call('GET', linkFromEmail('tom@x.io'))[0]);
+
+    $mail->clear();
+    [, $json] = call('POST', '/auth/email/verification-notification', token: $token);
+    eq('Email already verified', $json['message']);
+    eq(0, count($mail->messages));
+});
+
+test('changing your email un-verifies it, sends a new link, and old links stop working', function () {
+    global $mail;
+    $vera = User::firstWhere('email', 'vera@x.io');
+    $token = $vera->createToken('t')->plainTextToken;
+    $oldLink = Simple\Auth\EmailVerification::url($vera);
+
+    $mail->clear();
+    eq(200, call('PATCH', "/users/{$vera->id}", ['email' => 'Vera.New@X.io'], $token)[0]);
+    $vera = User::find($vera->id);
+    eq('vera.new@x.io', $vera->email, 'stored lowercase');
+    eq(null, $vera->email_verified_at);
+
+    eq(403, call('GET', substr($oldLink, strlen('http://simple.test')))[0], 'link for the old address');
+    eq(200, call('GET', linkFromEmail('vera.new@x.io'))[0]);
+});
+
+test('verification redirects to the frontend when configured', function () {
+    register('Rae', 'rae@x.io');
+    config_set('auth.verified_redirect', 'https://app.test/verified');
+
+    [$status, , $response] = call('GET', linkFromEmail('rae@x.io'));
+    eq(302, $status);
+    eq('https://app.test/verified?verified=1', $response->headers()['Location']);
+
+    [, , $response] = call('GET', tamper(linkFromEmail('rae@x.io'), 'signature', 'x'));
+    eq('https://app.test/verified?verified=0', $response->headers()['Location']);
+
+    config_set('auth.verified_redirect', null);
+});
+
+section('Password reset');
+
+test('forgot-password gives the same response for known and unknown emails', function () {
+    global $mail;
+    $mail->clear();
+    [$s1, $j1] = call('POST', '/auth/forgot-password', ['email' => 'ADA@x.io'], ip: uniqid());
+    [$s2, $j2] = call('POST', '/auth/forgot-password', ['email' => 'nobody@x.io'], ip: uniqid());
+
+    eq(200, $s1);
+    eq([$s1, $j1], [$s2, $j2]);
+    eq(1, count($mail->sentTo('ada@x.io')), 'known email (case-insensitive) gets a link');
+    eq(0, count($mail->sentTo('nobody@x.io')));
+});
+
+test('the reset token is stored hashed', function () {
+    parse_str(parse_url(linkFromEmail('ada@x.io'), PHP_URL_QUERY), $q);
+    $row = (new Simple\Database\QueryBuilder(Simple\Database\Connection::get(), 'password_reset_tokens'))->where('email', 'ada@x.io')->first();
+    eq(hash('sha256', $q['token']), $row['token']);
+});
+
+test('reset emails to the same address are throttled', function () {
+    global $mail;
+    $before = count($mail->sentTo('ada@x.io'));
+    call('POST', '/auth/forgot-password', ['email' => 'ada@x.io'], ip: uniqid());
+    eq($before, count($mail->sentTo('ada@x.io')), 'second request within 60s sends nothing');
+});
+
+test('reset with a wrong token fails and changes nothing', function () {
+    [$status] = call('POST', '/auth/reset-password', ['email' => 'ada@x.io', 'token' => str_repeat('a', 64), 'password' => 'new-password-1'], ip: uniqid());
+    eq(422, $status);
+    eq(true, User::firstWhere('email', 'ada@x.io')->verifyPassword('password123'));
+});
+
+test('a token only works for its own email', function () {
+    parse_str(parse_url(linkFromEmail('ada@x.io'), PHP_URL_QUERY), $q);
+    eq(422, call('POST', '/auth/reset-password', ['email' => 'bob@x.io', 'token' => $q['token'], 'password' => 'new-password-1'], ip: uniqid())[0]);
+});
+
+test('reset sets the new password, revokes all tokens, and the token is single-use', function () {
+    $ada = User::firstWhere('email', 'ada@x.io');
+    $apiToken = $ada->createToken('phone')->plainTextToken;
+    parse_str(parse_url(linkFromEmail('ada@x.io'), PHP_URL_QUERY), $q);
+
+    [$status] = call('POST', '/auth/reset-password', ['email' => $q['email'], 'token' => $q['token'], 'password' => 'new-password-1'], ip: uniqid());
+    eq(200, $status);
+
+    $ada = User::firstWhere('email', 'ada@x.io');
+    eq(true, $ada->verifyPassword('new-password-1'));
+    eq(false, $ada->verifyPassword('password123'));
+    eq(401, call('GET', '/auth/me', token: $apiToken)[0], 'old API tokens revoked');
+    eq(422, call('POST', '/auth/reset-password', ['email' => $q['email'], 'token' => $q['token'], 'password' => 'another-pass-2'], ip: uniqid())[0], 'reused');
+    eq(200, call('POST', '/auth/login', ['email' => 'ada@x.io', 'password' => 'new-password-1'], ip: uniqid())[0]);
+});
+
+test('expired reset tokens are rejected', function () {
+    $broker = Simple\Auth\PasswordBroker::class;
+    $bob = User::firstWhere('email', 'bob@x.io');
+    $token = $broker::createToken($bob);
+    (new Simple\Database\QueryBuilder(Simple\Database\Connection::get(), 'password_reset_tokens'))
+        ->where('email', 'bob@x.io')->update(['created_at' => date('Y-m-d H:i:s', time() - 61 * 60)]);
+
+    eq(false, $broker::tokenIsValid('bob@x.io', $token));
+    eq(1, $broker::prune());
+});
+
+test('reset validates the new password', function () {
+    [$status, $json] = call('POST', '/auth/reset-password', ['email' => 'ada@x.io', 'token' => 'x', 'password' => 'short'], ip: uniqid());
+    eq(422, $status);
+    eq(true, isset($json['errors']['password']));
+});
+
+section('Mail failures');
+
+test('a failing mail server does not break registration', function () {
+    Simple\Mail\Mail::useTransport(new class implements Simple\Mail\Transport\Transport {
+        public function send(Simple\Mail\Message $message): void
+        {
+            throw new RuntimeException('SMTP down');
+        }
+    });
+
+    [$status, $json] = call('POST', '/auth/register', ['name' => 'Ned', 'email' => 'ned@x.io', 'password' => 'password123'], ip: uniqid());
+    eq(201, $status);
+    eq(true, isset($json['data']['token']));
+
+    global $mail;
+    Simple\Mail\Mail::useTransport($mail);
 });
 
 section('CLI');

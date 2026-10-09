@@ -15,6 +15,11 @@ class User extends Model
 
     protected array $casts = ['id' => 'int'];
 
+    protected function setEmailAttribute(string $value): string
+    {
+        return strtolower(trim($value));
+    }
+
     /**
      * Passwords are always hashed before they are stored.
      */

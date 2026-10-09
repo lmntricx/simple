@@ -115,6 +115,14 @@ class Request
         return array_diff_key($this->all(), array_flip($keys));
     }
 
+    /**
+     * Add or overwrite input values, e.g. to normalise them before validation.
+     */
+    public function merge(array $values): void
+    {
+        $this->body = array_replace($this->body, $values);
+    }
+
     public function has(string $key): bool
     {
         return array_key_exists($key, $this->all());

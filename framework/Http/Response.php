@@ -61,6 +61,11 @@ class Response
         return new static('', 204);
     }
 
+    public static function redirect(string $url, int $status = 302): static
+    {
+        return new static('', $status, ['Location' => $url]);
+    }
+
     /**
      * Turn whatever a controller returned into a Response.
      */

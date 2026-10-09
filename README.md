@@ -4,6 +4,7 @@ A small, batteries-included PHP 8.1+ framework for JSON APIs. No dependencies.
 
 ```bash
 cp .env.example .env
+php simple key:generate
 php simple migrate
 php simple serve          # http://127.0.0.1:8000
 ```
@@ -144,6 +145,7 @@ MySQL commits schema changes immediately, so a failed migration there may need m
 ```
 php tests/orm.php
 php tests/auth.php
+php tests/mail.php
 ```
 
 ## Authentication
@@ -157,6 +159,10 @@ API tokens, sent as `Authorization: Bearer {token}`. Built-in endpoints (`app/Co
 | GET    | `/auth/me`         | ✓    | The current user                             |
 | POST   | `/auth/logout`     | ✓    | Revoke the token used for this request       |
 | POST   | `/auth/logout-all` | ✓    | Revoke all of the user's tokens              |
+| GET    | `/auth/verify-email/{id}/{hash}` | | The signed link from the verification email |
+| POST   | `/auth/email/verification-notification` | ✓ | Resend the verification email     |
+| POST   | `/auth/forgot-password` |  | `email` → emails a reset link (same response whether or not the account exists) |
+| POST   | `/auth/reset-password`  |  | `email, token, password` → sets the password and logs out every device |
 
 Register and login are rate limited (`throttle:10,1`, per IP). Tokens look like `12|8f3a...`; only a SHA-256
 hash is stored, so a database leak doesn't expose usable tokens. The plain token is returned once, at creation.
@@ -179,9 +185,50 @@ $user->tokens()->delete();  // revoke all
 Auth::attempt($email, $password);   // returns the user or null
 ```
 
+### Email verification
+
+Registering sends a verification email with a signed link that expires (`auth.verification_expire`, 60 minutes)
+and stops working if the user changes their email. Changing your email via `PATCH /users/{id}` marks it
+unverified and sends a new link. Restrict routes to verified users with `->middleware('auth', 'verified')`.
+
+The link points at this API. Set `EMAIL_VERIFIED_REDIRECT` to send the browser to your frontend afterwards
+(with `?verified=1`, or `?verified=0` for a bad link); otherwise the link responds with JSON.
+
+### Password reset
+
+`POST /auth/forgot-password` emails a link to `PASSWORD_RESET_URL?token=...&email=...` (your frontend's page,
+default `APP_URL/reset-password`). That page should `POST /auth/reset-password` with the email, token and new
+password. Tokens are random, stored hashed, single-use, expire after 60 minutes, and can be requested at most once a
+minute per address. A reset revokes all of the user's API tokens.
+
+Edit the email wording in `app/Mail/AuthMail.php`.
+
 Any model can authenticate by adding `use HasApiTokens` and pointing `config/auth.php` at it. Set
 `AUTH_TOKEN_EXPIRATION` (minutes) to expire tokens globally, and run `php simple auth:prune` (e.g. daily from
 cron) to delete expired ones.
+
+## Mail
+
+```php
+Mail::send(
+    Message::create()->to('ada@example.com', 'Ada')->subject('Welcome')->text("Hi Ada!")->html('<p>Hi Ada!</p>')
+);
+
+app()->defer(fn () => Mail::send($message));   // send after the response has gone out
+```
+
+Drivers (`MAIL_DRIVER`): `log` writes readable emails to `storage/logs/mail.log` (the default, handy for copying
+links in development); `smtp` sends through `MAIL_HOST`/`MAIL_PORT` with `MAIL_ENCRYPTION` = `tls` (STARTTLS),
+`ssl` or `none`; `array` keeps them in memory. In tests, `$mail = Mail::fake()` then `$mail->sentTo('ada@x.io')`.
+
+## Signed URLs
+
+Links that can't be tampered with, signed with `APP_KEY` (run `php simple key:generate` once):
+
+```php
+$url = UrlSigner::sign('/invites/42', ['role' => 'editor'], expiresAt: time() + 3600);
+UrlSigner::isValid($request);   // in the route that handles it
+```
 
 ## Middleware
 
@@ -202,7 +249,7 @@ Register a short name in `config/app.php` under `middleware_aliases`, then use `
 Parameters after a colon go to the middleware's constructor: `throttle:5,1` calls `new Throttle('5', '1')`.
 Global middleware (run on every request) is listed under `middleware`. CORS is on by default; configure it in `config/cors.php`.
 
-Built in: `auth`, `ability:a,b`, `throttle:maxAttempts,minutes`.
+Built in: `auth`, `verified`, `ability:a,b`, `throttle:maxAttempts,minutes`.
 
 ## CLI
 
@@ -211,6 +258,7 @@ php simple serve [--port=8000]
 php simple routes
 php simple migrate | migrate:rollback | migrate:status
 php simple auth:prune
+php simple key:generate [--show] [--force]
 php simple make:controller PostController
 php simple make:model Post -m
 php simple make:migration add_slug_to_posts

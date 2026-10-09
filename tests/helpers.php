@@ -7,10 +7,19 @@
 
 putenv('DB_CONNECTION=sqlite');
 putenv('DB_DATABASE_PATH=:memory:');
+putenv('APP_KEY=base64:' . base64_encode(str_repeat('k', 32)));
+putenv('APP_URL=http://simple.test');
+putenv('MAIL_DRIVER=array');
 
 $app = require __DIR__ . '/../bootstrap/app.php';
+$mail = Simple\Mail\Mail::fake();
 restore_error_handler();
-set_error_handler(fn ($l, $m, $f, $line) => throw new ErrorException($m, 0, $l, $f, $line));
+set_error_handler(function ($level, $message, $file, $line) {
+    if (!(error_reporting() & $level)) {
+        return false; // silenced with @
+    }
+    throw new ErrorException($message, 0, $level, $file, $line);
+});
 
 $passed = $failed = 0;
 

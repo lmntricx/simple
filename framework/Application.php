@@ -25,6 +25,9 @@ class Application
     public readonly Config $config;
     public readonly Router $router;
 
+    /** @var \Closure[] */
+    private array $deferred = [];
+
     public function __construct(public readonly string $basePath)
     {
         static::$instance = $this;
@@ -90,6 +93,52 @@ class Application
     public function run(): void
     {
         $this->handle(Request::capture())->send();
+
+        // Hand the response to the client before running deferred work (PHP-FPM).
+        if (function_exists('fastcgi_finish_request')) {
+            fastcgi_finish_request();
+        }
+
+        $this->terminate();
+    }
+
+    /**
+     * Run $callback after the response has been sent, e.g. sending email.
+     * This keeps responses fast, and keeps their timing from revealing what
+     * the callback did (such as whether an account exists).
+     */
+    public function defer(\Closure $callback): void
+    {
+        $this->deferred[] = $callback;
+    }
+
+    /**
+     * Run deferred callbacks. Called by run(); call it yourself after handle()
+     * in tests or long-running workers.
+     */
+    public function terminate(): void
+    {
+        while ($callback = array_shift($this->deferred)) {
+            try {
+                $callback();
+            } catch (Throwable $e) {
+                Log::exception($e);
+            }
+        }
+    }
+
+    /**
+     * The binary APP_KEY used to sign URLs. Generate one with `php simple key:generate`.
+     */
+    public function key(): string
+    {
+        $key = (string) $this->config->get('app.key', '');
+
+        if ($key === '') {
+            throw new \RuntimeException('APP_KEY is not set. Run `php simple key:generate`.');
+        }
+
+        return str_starts_with($key, 'base64:') ? base64_decode(substr($key, 7), true) : $key;
     }
 
     public function renderException(Throwable $e): Response

@@ -31,13 +31,28 @@ class UserController
     {
         $user = $this->ownAccount($request, $id);
 
+        if (is_string($request->input('email'))) {
+            $request->merge(['email' => strtolower(trim($request->input('email')))]);
+        }
+
         $data = $request->validate([
             'name' => 'sometimes|required|string|max:255',
             'email' => "sometimes|required|email|max:255|unique:users,email,{$user->id}",
             'password' => 'sometimes|required|string|min:8|max:255',
         ]);
 
-        $user->update($data);
+        $emailChanged = isset($data['email']) && $data['email'] !== $user->email;
+
+        $user->fill($data);
+        if ($emailChanged) {
+            // The new address has to be verified again.
+            $user->forceFill(['email_verified_at' => null]);
+        }
+        $user->save();
+
+        if ($emailChanged) {
+            AuthController::sendVerificationEmail($user);
+        }
 
         return Response::success($user, 'User updated');
     }

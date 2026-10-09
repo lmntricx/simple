@@ -3,7 +3,9 @@
 namespace Simple\Console;
 
 use Simple\Application;
+use Simple\Auth\PasswordBroker;
 use Simple\Auth\PersonalAccessToken;
+use Simple\Database\Schema\Schema;
 use Simple\Database\Migrator;
 use Simple\Support\Str;
 
@@ -18,7 +20,8 @@ class Kernel
         'migrate' => 'Run pending migrations',
         'migrate:rollback' => 'Undo the last batch of migrations',
         'migrate:status' => 'Show which migrations have run',
-        'auth:prune' => 'Delete expired API tokens',
+        'auth:prune' => 'Delete expired API tokens and password reset tokens',
+        'key:generate' => 'Set APP_KEY in .env              [--show to print only, --force to replace]',
         'make:migration' => 'Create a migration            <name>, e.g. create_posts_table',
         'make:controller' => 'Create a controller           <Name>',
         'make:model' => 'Create a model                <Name> [-m to add a migration]',
@@ -42,6 +45,7 @@ class Kernel
             'migrate:rollback' => $this->rollback(),
             'migrate:status' => $this->status(),
             'auth:prune' => $this->pruneTokens(),
+            'key:generate' => $this->generateKey($options),
             'make:migration' => $this->makeMigration($args[0] ?? null),
             'make:controller' => $this->make('controller', $args[0] ?? null),
             'make:model' => $this->makeModel($args[0] ?? null, in_array('-m', $options, true)),
@@ -134,7 +138,39 @@ class Kernel
             $deleted += PersonalAccessToken::query()->where('created_at', '<=', $cutoff)->delete();
         }
 
-        $this->line("Deleted $deleted expired token(s).");
+        $this->line("Deleted $deleted expired API token(s).");
+
+        if (Schema::hasTable('password_reset_tokens')) {
+            $this->line('Deleted ' . PasswordBroker::prune() . ' expired password reset token(s).');
+        }
+
+        return 0;
+    }
+
+    private function generateKey(array $options): int
+    {
+        $key = 'base64:' . base64_encode(random_bytes(32));
+
+        if (in_array('--show', $options, true)) {
+            $this->line($key);
+            return 0;
+        }
+
+        $file = $this->app->basePath . '/.env';
+        $env = is_file($file) ? file_get_contents($file) : '';
+
+        if (preg_match('/^APP_KEY=(.+)$/m', $env, $m) && trim($m[1]) !== '' && !in_array('--force', $options, true)) {
+            return $this->fail('APP_KEY is already set. Changing it invalidates every signed link already sent '
+                . '(e.g. email verification). Use --force to replace it.');
+        }
+
+        $env = preg_match('/^APP_KEY=.*$/m', $env)
+            ? preg_replace('/^APP_KEY=.*$/m', 'APP_KEY=' . $key, $env)
+            : rtrim($env, "\r\n") . ($env === '' ? '' : PHP_EOL) . 'APP_KEY=' . $key . PHP_EOL;
+
+        file_put_contents($file, $env);
+        $this->line('APP_KEY set in .env');
+
         return 0;
     }
 
