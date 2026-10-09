@@ -1,0 +1,38 @@
+<?php
+
+namespace App\Controllers;
+
+use Simple\Http\Request;
+use Simple\Http\Response;
+
+class {{class}}
+{
+    public function index(Request $request): Response
+    {
+        return Response::success([]);
+    }
+
+    public function show(Request $request, string $id): Response
+    {
+        return Response::success(['id' => $id]);
+    }
+
+    public function store(Request $request): Response
+    {
+        $data = $request->validate([
+            // 'name' => 'required|string|max:255',
+        ]);
+
+        return Response::created($data);
+    }
+
+    public function update(Request $request, string $id): Response
+    {
+        return Response::success(['id' => $id]);
+    }
+
+    public function destroy(Request $request, string $id): Response
+    {
+        return Response::noContent();
+    }
+}

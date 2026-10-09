@@ -1,0 +1,7 @@
+#!/usr/bin/env php
+<?php
+
+/** @var \Simple\Application $app */
+$app = require __DIR__ . '/bootstrap/app.php';
+
+exit((new Simple\Console\Kernel($app))->handle($argv));

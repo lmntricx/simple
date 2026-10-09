@@ -1,13 +1,6 @@
+# Only needed when the project root (not public/) is the web root, e.g. shared hosting.
+# Forwards every request into public/ so app code, config and .env are never served.
 <IfModule mod_rewrite.c>
-  RewriteEngine On
-
-  # Exclude API requests from React routing
-  RewriteCond %{REQUEST_URI} ^/api
-  RewriteRule ^ - [L]
-
-  # React SPA fallback
-  RewriteCond %{REQUEST_FILENAME} !-f
-  RewriteCond %{REQUEST_FILENAME} !-d
-  RewriteRule . /index.html [L]
+    RewriteEngine On
+    RewriteRule ^(.*)$ public/$1 [L]
 </IfModule>
-

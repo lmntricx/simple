@@ -1,0 +1,18 @@
+<?php
+
+namespace App\Middleware;
+
+use Closure;
+use Simple\Http\Middleware;
+use Simple\Http\Request;
+use Simple\Http\Response;
+
+class {{class}} implements Middleware
+{
+    public function handle(Request $request, Closure $next): Response
+    {
+        // Return a Response here to stop the request, e.g. Response::error('Unauthorized', 401)
+
+        return $next($request);
+    }
+}
