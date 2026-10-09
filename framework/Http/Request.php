@@ -144,10 +144,53 @@ class Request
         return str_starts_with($header, 'Bearer ') ? trim(substr($header, 7)) : null;
     }
 
-    public function file(string $key): ?array
+    /**
+     * An uploaded file, or null if none was sent. For inputs like "photos[]",
+     * returns an array of files.
+     *
+     * @return UploadedFile|UploadedFile[]|null
+     */
+    public function file(string $key): UploadedFile|array|null
     {
-        $file = $this->files[$key] ?? null;
-        return is_array($file) && ($file['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_NO_FILE ? $file : null;
+        return $this->allFiles()[$key] ?? null;
+    }
+
+    public function hasFile(string $key): bool
+    {
+        return $this->file($key) !== null;
+    }
+
+    /**
+     * Every uploaded file, keyed by input name. Empty file inputs are left out.
+     *
+     * @return array<string, UploadedFile|UploadedFile[]>
+     */
+    public function allFiles(): array
+    {
+        $files = [];
+
+        foreach ($this->files as $key => $file) {
+            if ($file instanceof UploadedFile) {
+                $files[$key] = $file;
+            } elseif (is_array($file) && $file !== [] && array_filter($file, fn ($f) => !$f instanceof UploadedFile) === []) {
+                $files[$key] = array_values($file);
+            } elseif (is_array($file) && is_array($file['name'] ?? null)) {
+                // name="photos[]": $_FILES['photos'] = ['name' => [...], 'tmp_name' => [...], ...]
+                $list = [];
+                foreach (array_keys($file['name']) as $i) {
+                    if (($file['error'][$i] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_NO_FILE) {
+                        $list[] = UploadedFile::fromArray(array_map(fn ($field) => $field[$i] ?? null, $file));
+                    }
+                }
+                if ($list !== []) {
+                    $files[$key] = $list;
+                }
+            } elseif (is_array($file) && ($file['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_NO_FILE) {
+                $files[$key] = UploadedFile::fromArray($file);
+            }
+        }
+
+        return $files;
     }
 
     /**
@@ -232,6 +275,6 @@ class Request
      */
     public function validate(array $rules): array
     {
-        return Validator::make($this->all(), $rules)->validate();
+        return Validator::make(array_replace($this->all(), $this->allFiles()), $rules)->validate();
     }
 }

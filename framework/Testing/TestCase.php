@@ -9,6 +9,8 @@ use Simple\Database\Migrator;
 use Simple\Database\Model;
 use Simple\Database\Schema\Schema;
 use Simple\Http\Request;
+use Simple\Http\UploadedFile;
+use Simple\Storage\Storage;
 use Simple\Mail\Mail;
 use Simple\Mail\Transport\ArrayTransport;
 use Simple\Support\RateLimiter;
@@ -38,6 +40,7 @@ abstract class TestCase extends BaseTestCase
 
         $this->app = require $this->basePath() . '/bootstrap/app.php';
         $this->mail = Mail::fake();
+        Storage::reset();
 
         $this->rateLimitDir = sys_get_temp_dir() . '/simple_rl_' . bin2hex(random_bytes(6));
         RateLimiter::$directory = $this->rateLimitDir;
@@ -56,6 +59,7 @@ abstract class TestCase extends BaseTestCase
 
         Auth::forget();
         Mail::useTransport(null);
+        Storage::reset();
 
         foreach (glob($this->rateLimitDir . '/*') ?: [] as $file) {
             @unlink($file);
@@ -84,7 +88,12 @@ abstract class TestCase extends BaseTestCase
             array_replace(['content-type' => 'application/json', 'accept' => 'application/json'], $this->defaultHeaders, $headers),
         );
 
-        $request = new Request($method, $path, $query, $data, $headers, [], $this->serverVariables);
+        // UploadedFile values (UploadedFile::fake(...)) are sent as file uploads.
+        $files = array_filter($data, fn ($v) => $v instanceof UploadedFile
+            || (is_array($v) && $v !== [] && array_filter($v, fn ($f) => !$f instanceof UploadedFile) === []));
+        $data = array_diff_key($data, $files);
+
+        $request = new Request($method, $path, $query, $data, $headers, $files, $this->serverVariables);
         $response = $this->app->handle($request);
         $this->app->terminate(); // run deferred work (e.g. emails) like a real request would
 

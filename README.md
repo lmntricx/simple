@@ -21,6 +21,7 @@ database/seeders/     `php simple db:seed`
 framework/            the framework itself (namespace Simple\)
 public/index.php      the only web entry point; point your web server here
 routes/api.php        route definitions
+storage/app/          private files (Storage::disk())
 storage/logs/         simple.log
 simple                CLI
 ```
@@ -304,6 +305,48 @@ Edit the email wording in `app/Mail/AuthMail.php`.
 Any model can authenticate by adding `use HasApiTokens` and pointing `config/auth.php` at it. Set
 `AUTH_TOKEN_EXPIRATION` (minutes) to expire tokens globally, and run `php simple auth:prune` (e.g. daily from
 cron) to delete expired ones.
+
+## File uploads and storage
+
+```php
+public function updateAvatar(Request $request): Response
+{
+    $request->validate(['avatar' => 'required|image|max:2048']);          // max in kilobytes
+
+    $path = $request->file('avatar')->store('avatars', 'public');        // avatars/3f9c…e1.png
+    return Response::success(['url' => Storage::disk('public')->url($path)]);
+}
+```
+
+Two disks are configured in `config/filesystems.php`:
+
+- **`public`** (`public/uploads`): served directly at `APP_URL/uploads/...`. For files anyone may see.
+- **`local`** (`storage/app`, the default): not reachable by URL. Check permissions in a controller, then
+  `return Storage::disk()->download('invoices/42.pdf', 'Invoice 42.pdf');` (or `->response($path)` to show inline).
+
+Disk methods: `put get exists delete size files path url download response putFile putFileAs`.
+
+Uploads are treated as hostile:
+
+- **File type comes from the contents**, not the name or the client's MIME type. A PHP script named `photo.jpg` fails
+  `image` and `mimes:jpg`.
+- **Stored names are random**, with the extension chosen from the detected type (unknown types get `.bin`), so an
+  upload can never be saved as `.php` or `.html`.
+- **The `image` rule excludes SVG**, which can contain JavaScript.
+- **Paths can't escape a disk:** `../` is rejected.
+- **`public/uploads/.htaccess`** stops Apache from executing anything there.
+
+Rules: `file`, `image`, `mimes:pdf,docx,csv`, plus `min`/`max`/`between` in kilobytes. Multiple files
+(`name="photos[]"`) come back as an array from `$request->file('photos')`. PHP limits uploads with
+`upload_max_filesize` and `post_max_size` in php.ini; raise them for large files.
+
+In tests:
+
+```php
+$disk = Storage::fake('public');
+$this->postJson('/avatar', ['avatar' => UploadedFile::fakeImage('me.png')])->assertOk();
+$this->assertCount(1, $disk->files('avatars'));
+```
 
 ## Mail
 

@@ -5,15 +5,19 @@ namespace Simple\Validation;
 use InvalidArgumentException;
 use Simple\Database\Connection;
 use Simple\Database\QueryBuilder;
+use Simple\Http\UploadedFile;
 
 /**
  * Rules are pipe-separated strings or arrays:
  *   ['email' => 'required|email|max:255|unique:users,email', 'age' => ['nullable', 'integer', 'min:18']]
  *
  * Available: required, nullable, sometimes, string, integer, numeric, boolean, array, email, url,
- *            min:n, max:n, between:a,b, in:a,b,c, confirmed, regex:/x/, unique:table,column[,ignoreId]
+ *            min:n, max:n, between:a,b, in:a,b,c, confirmed, regex:/x/, unique:table,column[,ignoreId],
+ *            file, image, mimes:jpg,png,pdf
  *
- * min/max/between compare length for strings, count for arrays, value for numbers.
+ * min/max/between compare length for strings, count for arrays, value for numbers and
+ * size in kilobytes for files: 'avatar' => 'required|image|max:2048' (2 MB).
+ * File types are checked against the detected contents, not the client's file name.
  */
 class Validator
 {
@@ -94,14 +98,30 @@ class Validator
     protected function check(string $field, mixed $value, string $rule, ?string $param, array $rules): ?string
     {
         $numeric = in_array('integer', $rules, true) || in_array('numeric', $rules, true);
+        $isFile = $value instanceof UploadedFile;
         $size = fn () => match (true) {
+            $isFile => $value->size() / 1024,
             is_array($value) => count($value),
             $numeric && is_numeric($value) => $value + 0,
             default => mb_strlen((string) $value),
         };
-        $unit = is_array($value) ? ' items' : ($numeric ? '' : ' characters');
+        $unit = match (true) {
+            $isFile => ' kilobytes',
+            is_array($value) => ' items',
+            $numeric => '',
+            default => ' characters',
+        };
+
+        if ($isFile && $rule !== 'file' && !$value->isValid()) {
+            return "The $field failed to upload. " . $value->errorMessage();
+        }
 
         return match ($rule) {
+            'file' => $isFile && $value->isValid() ? null : ($isFile ? "The $field failed to upload. " . $value->errorMessage() : "The $field must be a file."),
+            'image' => $isFile && $value->isImage() ? null : "The $field must be an image (jpg, png, gif, webp, avif, bmp or heic).",
+            'mimes' => $isFile && $this->matchesMimes($value, explode(',', strtolower((string) $param)))
+                ? null
+                : "The $field must be a file of type: " . str_replace(',', ', ', (string) $param) . '.',
             'string' => is_string($value) ? null : "The $field must be a string.",
             'integer' => filter_var($value, FILTER_VALIDATE_INT) !== false ? null : "The $field must be an integer.",
             'numeric' => is_numeric($value) ? null : "The $field must be a number.",
@@ -121,6 +141,23 @@ class Validator
             'unique' => $this->isUnique($field, $value, (string) $param) ? null : "The $field has already been taken.",
             default => throw new InvalidArgumentException("Unknown validation rule [$rule]."),
         };
+    }
+
+    /**
+     * Compares the extension of the detected content type, so "evil.php" renamed
+     * to "photo.jpg" fails mimes:jpg.
+     */
+    protected function matchesMimes(UploadedFile $file, array $extensions): bool
+    {
+        $extensions = array_map(fn ($e) => $e === 'jpeg' ? 'jpg' : trim($e), $extensions);
+        $detected = $file->extension();
+
+        if ($detected !== null && in_array($detected, $extensions, true)) {
+            return true;
+        }
+
+        // CSV files are usually detected as plain text; accept them when the name says .csv.
+        return $detected === 'txt' && $file->clientExtension() === 'csv' && in_array('csv', $extensions, true);
     }
 
     protected function isUnique(string $field, mixed $value, string $param): bool
