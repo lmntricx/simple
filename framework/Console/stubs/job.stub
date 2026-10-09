@@ -1,0 +1,33 @@
+<?php
+
+namespace App\Jobs;
+
+use Simple\Queue\Job;
+use Throwable;
+
+class {{class}} extends Job
+{
+    /** Attempts before the job is recorded in failed_jobs. */
+    public int $tries = 3;
+
+    /** Seconds between attempts (or an array per attempt, e.g. [10, 60, 300]). */
+    public int|array $backoff = 10;
+
+    public function __construct()
+    {
+        // Pass in what the job needs. Models are re-fetched when the job runs.
+    }
+
+    /**
+     * Dependencies listed here are injected by the container.
+     */
+    public function handle(): void
+    {
+        //
+    }
+
+    public function failed(Throwable $exception): void
+    {
+        // Called once all attempts have failed.
+    }
+}

@@ -485,6 +485,41 @@ abstract class Model implements JsonSerializable
         return new QueryBuilder($this->getConnection(), $this->getTable(), static::class);
     }
 
+    /**
+     * Saved models serialize as class + key (plus which relations were loaded),
+     * and are re-fetched on unserialize. Queued jobs therefore see current data,
+     * not a snapshot from when they were dispatched.
+     */
+    public function __serialize(): array
+    {
+        if ($this->exists && $this->getKey() !== null) {
+            return ['key' => $this->getKey(), 'relations' => array_keys($this->relations)];
+        }
+
+        return ['attributes' => $this->attributes];
+    }
+
+    public function __unserialize(array $data): void
+    {
+        if (!array_key_exists('key', $data)) {
+            $this->attributes = $data['attributes'] ?? [];
+            return;
+        }
+
+        $fresh = static::query()->find($data['key'], $this->primaryKey);
+
+        if ($fresh === null) {
+            throw new ModelNotFoundException(static::class . " [{$data['key']}] no longer exists.");
+        }
+
+        $this->attributes = $this->original = $fresh->attributes;
+        $this->exists = true;
+
+        if (!empty($data['relations'])) {
+            $this->load(...$data['relations']);
+        }
+    }
+
     public function __get(string $key): mixed
     {
         return $this->getAttribute($key);

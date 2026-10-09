@@ -10,6 +10,7 @@ use Simple\Database\Model;
 use Simple\Database\Schema\Schema;
 use Simple\Http\Request;
 use Simple\Http\UploadedFile;
+use Simple\Queue\Queue;
 use Simple\Storage\Storage;
 use Simple\Mail\Mail;
 use Simple\Mail\Transport\ArrayTransport;
@@ -41,6 +42,7 @@ abstract class TestCase extends BaseTestCase
         $this->app = require $this->basePath() . '/bootstrap/app.php';
         $this->mail = Mail::fake();
         Storage::reset();
+        Queue::reset();
 
         $this->rateLimitDir = sys_get_temp_dir() . '/simple_rl_' . bin2hex(random_bytes(6));
         RateLimiter::$directory = $this->rateLimitDir;
@@ -60,6 +62,7 @@ abstract class TestCase extends BaseTestCase
         Auth::forget();
         Mail::useTransport(null);
         Storage::reset();
+        Queue::reset();
 
         foreach (glob($this->rateLimitDir . '/*') ?: [] as $file) {
             @unlink($file);

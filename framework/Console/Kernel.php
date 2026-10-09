@@ -14,6 +14,9 @@ use Simple\Support\Str;
  */
 class Kernel
 {
+    use QueueCommands;
+    use ScheduleCommands;
+
     private const COMMANDS = [
         'serve' => 'Start the PHP development server  [--port=8000]',
         'routes' => 'List registered routes',
@@ -22,6 +25,15 @@ class Kernel
         'migrate:status' => 'Show which migrations have run',
         'db:seed' => 'Run database/seeders/DatabaseSeeder  [--class=Name]',
         'db:fresh' => 'Drop all tables, re-run migrations [--seed] [--force in production]',
+        'queue:work' => 'Process queued jobs   [--queue=high,default] [--once] [--stop-when-empty] [--max-jobs=N] [--max-time=S]',
+        'queue:failed' => 'List failed jobs',
+        'queue:retry' => 'Retry a failed job                <id|all>',
+        'queue:forget' => 'Delete a failed job               <id>',
+        'queue:flush' => 'Delete all failed jobs',
+        'queue:clear' => 'Delete pending jobs on a queue    [--queue=default]',
+        'schedule:run' => 'Run due scheduled tasks (call every minute from cron)',
+        'schedule:list' => 'List scheduled tasks and their next run',
+        'schedule:work' => 'Run the scheduler in the foreground (development)',
         'auth:prune' => 'Delete expired API tokens and password reset tokens',
         'key:generate' => 'Set APP_KEY in .env              [--show to print only, --force to replace]',
         'make:migration' => 'Create a migration            <name>, e.g. create_posts_table',
@@ -30,6 +42,7 @@ class Kernel
         'make:middleware' => 'Create a middleware           <Name>',
         'make:factory' => 'Create a model factory        <Model>, e.g. Post',
         'make:seeder' => 'Create a seeder               <Name>, e.g. PostSeeder',
+        'make:job' => 'Create a queued job           <Name>, e.g. SendInvoice',
     ];
 
     /** @var resource */
@@ -60,6 +73,15 @@ class Kernel
             'migrate:status' => $this->status(),
             'db:seed' => $this->seed($options),
             'db:fresh' => $this->fresh($options),
+            'queue:work' => $this->queueWork($options),
+            'queue:failed' => $this->queueFailed(),
+            'queue:retry' => $this->queueRetry($args[0] ?? null),
+            'queue:forget' => $this->queueForget($args[0] ?? null),
+            'queue:flush' => $this->queueFlush(),
+            'queue:clear' => $this->queueClear($options),
+            'schedule:run' => $this->scheduleRun(),
+            'schedule:list' => $this->scheduleList(),
+            'schedule:work' => $this->scheduleWork(),
             'auth:prune' => $this->pruneTokens(),
             'key:generate' => $this->generateKey($options),
             'make:migration' => $this->makeMigration($args[0] ?? null),
@@ -68,6 +90,7 @@ class Kernel
             'make:middleware' => $this->make('middleware', $args[0] ?? null),
             'make:factory' => $this->makeFactory($args[0] ?? null),
             'make:seeder' => $this->make('seeder', $args[0] ?? null),
+            'make:job' => $this->make('job', $args[0] ?? null),
             'help', '--help', '-h', 'list' => $this->help(),
             default => $this->fail("Unknown command [$command]. Run `php simple help`."),
         };
@@ -239,6 +262,7 @@ class Kernel
             'model' => 'app/Models',
             'middleware' => 'app/Middleware',
             'seeder' => 'database/seeders',
+            'job' => 'app/Jobs',
         ][$type];
         $path = "{$this->app->basePath}/$folder/$name.php";
 
@@ -309,6 +333,19 @@ class Kernel
         $this->line('Created: ' . substr($path, strlen($this->app->basePath) + 1));
 
         return 0;
+    }
+
+    /**
+     * Value of "--name=value" in $options, or null.
+     */
+    private function option(array $options, string $name): ?string
+    {
+        foreach ($options as $option) {
+            if (str_starts_with($option, "--$name=")) {
+                return substr($option, strlen($name) + 3);
+            }
+        }
+        return null;
     }
 
     private function line(string $text): void

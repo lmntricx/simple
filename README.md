@@ -21,6 +21,7 @@ database/seeders/     `php simple db:seed`
 framework/            the framework itself (namespace Simple\)
 public/index.php      the only web entry point; point your web server here
 routes/api.php        route definitions
+routes/schedule.php   scheduled tasks
 storage/app/          private files (Storage::disk())
 storage/logs/         simple.log
 simple                CLI
@@ -348,6 +349,92 @@ $this->postJson('/avatar', ['avatar' => UploadedFile::fakeImage('me.png')])->ass
 $this->assertCount(1, $disk->files('avatars'));
 ```
 
+## Queues
+
+Move slow or unreliable work (emails, image processing, calling other APIs) out of the request:
+
+```php
+// php simple make:job SendInvoice  ->  app/Jobs/SendInvoice.php
+class SendInvoice extends Job
+{
+    public int $tries = 3;                     // attempts before it's recorded as failed
+    public int|array $backoff = [10, 60];      // seconds between attempts
+
+    public function __construct(public Invoice $invoice) {}
+
+    public function handle(PdfRenderer $pdf): void { ... }      // dependencies are injected
+
+    public function failed(Throwable $e): void { ... }          // optional, after the last attempt
+}
+
+SendInvoice::dispatch($invoice);
+SendInvoice::dispatch($invoice)->delay(300)->onQueue('emails');
+```
+
+`QUEUE_CONNECTION`:
+
+- **`sync`** (the default): jobs run immediately, inside the request. No setup needed.
+- **`database`**: jobs go into the `jobs` table and a worker runs them:
+
+  ```
+  php simple queue:work                          # keep running (use supervisor/systemd in production)
+  php simple queue:work --queue=emails,default   # priority order
+  php simple queue:work --stop-when-empty        # e.g. from cron on shared hosting
+  ```
+
+How failures are handled:
+
+- **A failing job is retried** after its `$backoff` delay.
+- **After its last attempt** it goes into `failed_jobs`: `queue:failed` lists them, `queue:retry <id|all>` re-queues,
+  `queue:forget <id>` and `queue:flush` delete.
+- **Crashed workers don't lose jobs.** If a worker dies mid-job, the job is handed out again after `retry_after`
+  (90 s, `config/queue.php`). Keep that longer than your slowest job.
+- **Several workers can run safely.** Each job is claimed by exactly one worker.
+
+**Models in jobs are stored by id** and re-fetched when the job runs, so it sees current data. If the model has been
+deleted by then, the job fails straight away.
+
+Workers load your code once, so restart them after deploying.
+
+In tests, `$queue = Queue::fake();` records jobs instead of running them: `$queue->pushed(SendInvoice::class)`,
+`$queue->runAll()`.
+
+## Task scheduling
+
+Define recurring tasks in `routes/schedule.php`:
+
+```php
+return function (Schedule $schedule) {
+    $schedule->command('auth:prune')->daily();
+    $schedule->job(new SendWeeklyReport())->weeklyOn(1, '08:00');
+    $schedule->call(fn (Mailer $mailer) => ...)->everyFifteenMinutes()->withoutOverlapping();
+};
+```
+
+Then add **one** cron entry on the server:
+
+```
+* * * * * cd /path/to/project && php simple schedule:run >> /dev/null 2>&1
+```
+
+(On Windows, create a Task Scheduler task that runs `php simple schedule:run` every minute.) In development,
+`php simple schedule:work` does the same in the foreground. `php simple schedule:list` shows each task and when it
+runs next.
+
+Frequencies: `everyMinute everyTwoMinutes everyFiveMinutes everyTenMinutes everyFifteenMinutes everyThirtyMinutes
+hourly hourlyAt(17) everyTwoHours everySixHours daily dailyAt('13:00') twiceDaily(1, 13) weekly weeklyOn(1, '8:00')
+monthly monthlyOn(15, '12:00') quarterly yearly`, any `cron('0 9-17 * * 1-5')` expression, and the modifiers
+`weekdays() weekends() days([1, 3])`. Times use `APP_TIMEZONE`.
+
+Conditions:
+
+- **`when(fn () => ...)` / `skip(fn () => ...)`** decide each time the task is due.
+- **`environments('production')`** limits a task to particular environments.
+- **`withoutOverlapping()`** skips a run while the previous one is still going. It uses a file lock, which the OS
+  releases if the process crashes.
+
+A failing task is logged and doesn't stop the others.
+
 ## Mail
 
 ```php
@@ -399,6 +486,8 @@ php simple serve [--port=8000]
 php simple routes
 php simple migrate | migrate:rollback | migrate:status
 php simple db:seed [--class=Name] | db:fresh [--seed]
+php simple queue:work | queue:failed | queue:retry <id|all> | queue:forget <id> | queue:flush | queue:clear
+php simple schedule:run | schedule:list | schedule:work
 php simple auth:prune
 php simple key:generate [--show] [--force]
 php simple make:controller PostController
@@ -407,6 +496,7 @@ php simple make:migration add_slug_to_posts
 php simple make:middleware Authenticate
 php simple make:factory Post
 php simple make:seeder PostSeeder
+php simple make:job SendInvoice
 ```
 
 ## Deploying on Apache
