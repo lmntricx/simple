@@ -5,12 +5,7 @@
  *   php tests/orm.php
  */
 
-putenv('DB_CONNECTION=sqlite');
-putenv('DB_DATABASE_PATH=:memory:');
-
-$app = require __DIR__ . '/../bootstrap/app.php';
-restore_error_handler();
-set_error_handler(fn ($l, $m, $f, $line) => throw new ErrorException($m, 0, $l, $f, $line));
+$app = require __DIR__ . '/helpers.php';
 
 use Simple\Database\Connection;
 use Simple\Database\Migrator;
@@ -20,48 +15,6 @@ use Simple\Database\Schema\Blueprint;
 use Simple\Database\Schema\Column;
 use Simple\Database\Schema\Schema;
 use Simple\Http\HttpException;
-
-// ---- Tiny test runner -----------------------------------------------------
-
-$passed = $failed = 0;
-
-function test(string $name, Closure $fn): void
-{
-    global $passed, $failed;
-    try {
-        $fn();
-        $passed++;
-        echo "  \033[32m✓\033[0m $name\n";
-    } catch (Throwable $e) {
-        $failed++;
-        echo "  \033[31m✗ $name\033[0m\n      " . $e::class . ': ' . $e->getMessage() . "\n";
-    }
-}
-
-function eq(mixed $expected, mixed $actual, string $msg = ''): void
-{
-    if ($expected !== $actual) {
-        throw new Exception(($msg ? "$msg: " : '') . 'expected ' . var_export($expected, true) . ', got ' . var_export($actual, true));
-    }
-}
-
-function throws(string $class, Closure $fn): void
-{
-    try {
-        $fn();
-    } catch (Throwable $e) {
-        if ($e instanceof $class) {
-            return;
-        }
-        throw new Exception("expected $class, got " . $e::class . ': ' . $e->getMessage());
-    }
-    throw new Exception("expected $class, nothing thrown");
-}
-
-function section(string $name): void
-{
-    echo "\n$name\n";
-}
 
 // ---- Fixtures --------------------------------------------------------------
 
@@ -495,7 +448,4 @@ test('migrate / rollback / status, and a failing migration leaves nothing behind
     rmdir($dir);
 });
 
-// ---- Summary ---------------------------------------------------------------
-
-echo "\n" . ($failed ? "\033[31m" : "\033[32m") . "$passed passed, $failed failed\033[0m\n";
-exit($failed ? 1 : 0);
+finish();

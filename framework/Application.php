@@ -4,6 +4,7 @@ namespace Simple;
 
 use ErrorException;
 use LogicException;
+use Simple\Auth\Auth;
 use Simple\Database\Connection;
 use Simple\Http\HttpException;
 use Simple\Http\Pipeline;
@@ -65,6 +66,8 @@ class Application
 
     public function handle(Request $request): Response
     {
+        Auth::forget();
+
         try {
             return Pipeline::run(
                 $request,

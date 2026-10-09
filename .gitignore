@@ -4,6 +4,7 @@
 /.vscode/
 /storage/logs/*
 !/storage/logs/.gitkeep
+/storage/framework/
 /public/uploads/*
 !/public/uploads/.gitkeep
 /database/*.sqlite

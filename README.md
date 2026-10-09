@@ -143,7 +143,45 @@ MySQL commits schema changes immediately, so a failed migration there may need m
 
 ```
 php tests/orm.php
+php tests/auth.php
 ```
+
+## Authentication
+
+API tokens, sent as `Authorization: Bearer {token}`. Built-in endpoints (`app/Controllers/AuthController.php`):
+
+| Method | Path               | Auth | Description                                  |
+|--------|--------------------|------|----------------------------------------------|
+| POST   | `/auth/register`   |      | `name, email, password` → `{user, token}`    |
+| POST   | `/auth/login`      |      | `email, password[, device_name]` → `{user, token}` |
+| GET    | `/auth/me`         | ✓    | The current user                             |
+| POST   | `/auth/logout`     | ✓    | Revoke the token used for this request       |
+| POST   | `/auth/logout-all` | ✓    | Revoke all of the user's tokens              |
+
+Register and login are rate limited (`throttle:10,1`, per IP). Tokens look like `12|8f3a...`; only a SHA-256
+hash is stored, so a database leak doesn't expose usable tokens. The plain token is returned once, at creation.
+
+Protect routes with the `auth` middleware, then use `$request->user()` or `Auth::user()`:
+
+```php
+$router->group(['middleware' => ['auth']], function (Router $router) {
+    $router->post('/posts', [PostController::class, 'store']);
+});
+
+$router->delete('/posts/{id}', [PostController::class, 'destroy'])->middleware('auth', 'ability:posts:delete');
+```
+
+```php
+$token = $user->createToken('cli', ['posts:read'], new DateTime('+30 days'));   // abilities and expiry are optional
+$token->plainTextToken;     // give this to the client
+$user->tokenCan('posts:read');
+$user->tokens()->delete();  // revoke all
+Auth::attempt($email, $password);   // returns the user or null
+```
+
+Any model can authenticate by adding `use HasApiTokens` and pointing `config/auth.php` at it. Set
+`AUTH_TOKEN_EXPIRATION` (minutes) to expire tokens globally, and run `php simple auth:prune` (e.g. daily from
+cron) to delete expired ones.
 
 ## Middleware
 
@@ -160,8 +198,11 @@ class Authenticate implements Middleware
 }
 ```
 
-Register a short name in `config/app.php` under `middleware_aliases`, then use `->middleware('auth')` on a route or group.
+Register a short name in `config/app.php` under `middleware_aliases`, then use `->middleware('name')` on a route or group.
+Parameters after a colon go to the middleware's constructor: `throttle:5,1` calls `new Throttle('5', '1')`.
 Global middleware (run on every request) is listed under `middleware`. CORS is on by default; configure it in `config/cors.php`.
+
+Built in: `auth`, `ability:a,b`, `throttle:maxAttempts,minutes`.
 
 ## CLI
 
@@ -169,6 +210,7 @@ Global middleware (run on every request) is listed under `middleware`. CORS is o
 php simple serve [--port=8000]
 php simple routes
 php simple migrate | migrate:rollback | migrate:status
+php simple auth:prune
 php simple make:controller PostController
 php simple make:model Post -m
 php simple make:migration add_slug_to_posts

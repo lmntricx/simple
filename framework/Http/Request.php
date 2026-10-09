@@ -152,6 +152,19 @@ class Request
         return $this->server[$key] ?? $default;
     }
 
+    /**
+     * The authenticated user (set by the "auth" middleware), or null.
+     */
+    public function user(): ?\Simple\Database\Model
+    {
+        return $this->attributes['user'] ?? null;
+    }
+
+    public function setUser(?\Simple\Database\Model $user): void
+    {
+        $this->attributes['user'] = $user;
+    }
+
     public function setAttribute(string $key, mixed $value): void
     {
         $this->attributes[$key] = $value;

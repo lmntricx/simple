@@ -18,8 +18,10 @@ return [
         Simple\Http\Middleware\Cors::class,
     ],
 
-    // Short names for route middleware: ->middleware('auth')
+    // Short names for route middleware: ->middleware('auth', 'throttle:5,1')
     'middleware_aliases' => [
-        // 'auth' => App\Middleware\Authenticate::class,
+        'auth' => Simple\Auth\Middleware\Authenticate::class,
+        'ability' => Simple\Auth\Middleware\CheckAbilities::class,
+        'throttle' => Simple\Http\Middleware\Throttle::class,
     ],
 ];

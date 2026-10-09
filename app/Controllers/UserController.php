@@ -6,6 +6,10 @@ use App\Models\User;
 use Simple\Http\Request;
 use Simple\Http\Response;
 
+/**
+ * All routes require authentication (see routes/api.php). New users sign up
+ * through POST /auth/register.
+ */
 class UserController
 {
     public function index(Request $request): Response
@@ -23,25 +27,14 @@ class UserController
         return Response::success(User::findOrFail($id), 'User retrieved');
     }
 
-    public function store(Request $request): Response
-    {
-        $data = $request->validate([
-            'name' => 'required|string|max:255',
-            'email' => 'required|email|max:255|unique:users,email',
-            'password' => 'required|string|min:8',
-        ]);
-
-        return Response::created(User::create($data), 'User created');
-    }
-
     public function update(Request $request, string $id): Response
     {
-        $user = User::findOrFail($id);
+        $user = $this->ownAccount($request, $id);
 
         $data = $request->validate([
             'name' => 'sometimes|required|string|max:255',
             'email' => "sometimes|required|email|max:255|unique:users,email,{$user->id}",
-            'password' => 'sometimes|required|string|min:8',
+            'password' => 'sometimes|required|string|min:8|max:255',
         ]);
 
         $user->update($data);
@@ -51,8 +44,22 @@ class UserController
 
     public function destroy(Request $request, string $id): Response
     {
-        User::findOrFail($id)->delete();
+        $this->ownAccount($request, $id)->delete();
 
         return Response::success(null, 'User deleted');
+    }
+
+    /**
+     * Users may only change or delete their own account.
+     */
+    private function ownAccount(Request $request, string $id): User
+    {
+        $user = User::findOrFail($id);
+
+        if ((string) $user->id !== (string) $request->user()->getKey()) {
+            abort(403, 'You can only modify your own account');
+        }
+
+        return $user;
     }
 }

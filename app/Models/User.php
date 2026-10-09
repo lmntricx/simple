@@ -2,10 +2,13 @@
 
 namespace App\Models;
 
+use Simple\Auth\HasApiTokens;
 use Simple\Database\Model;
 
 class User extends Model
 {
+    use HasApiTokens;
+
     protected array $fillable = ['name', 'email', 'password'];
 
     protected array $hidden = ['password'];
@@ -17,7 +20,7 @@ class User extends Model
      */
     protected function setPasswordAttribute(string $value): string
     {
-        return password_get_info($value)['algo'] ? $value : password_hash($value, PASSWORD_DEFAULT);
+        return password_hash($value, PASSWORD_DEFAULT);
     }
 
     public function verifyPassword(string $password): bool

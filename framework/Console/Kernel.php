@@ -3,6 +3,7 @@
 namespace Simple\Console;
 
 use Simple\Application;
+use Simple\Auth\PersonalAccessToken;
 use Simple\Database\Migrator;
 use Simple\Support\Str;
 
@@ -17,6 +18,7 @@ class Kernel
         'migrate' => 'Run pending migrations',
         'migrate:rollback' => 'Undo the last batch of migrations',
         'migrate:status' => 'Show which migrations have run',
+        'auth:prune' => 'Delete expired API tokens',
         'make:migration' => 'Create a migration            <name>, e.g. create_posts_table',
         'make:controller' => 'Create a controller           <Name>',
         'make:model' => 'Create a model                <Name> [-m to add a migration]',
@@ -39,6 +41,7 @@ class Kernel
             'migrate' => $this->migrate(),
             'migrate:rollback' => $this->rollback(),
             'migrate:status' => $this->status(),
+            'auth:prune' => $this->pruneTokens(),
             'make:migration' => $this->makeMigration($args[0] ?? null),
             'make:controller' => $this->make('controller', $args[0] ?? null),
             'make:model' => $this->makeModel($args[0] ?? null, in_array('-m', $options, true)),
@@ -117,6 +120,21 @@ class Kernel
         foreach ($this->migrator()->status() as $name => $batch) {
             $this->line(sprintf('  %-8s %s', $batch === null ? 'Pending' : "Ran ($batch)", $name));
         }
+        return 0;
+    }
+
+    private function pruneTokens(): int
+    {
+        $now = date('Y-m-d H:i:s');
+        $deleted = PersonalAccessToken::query()->whereNotNull('expires_at')->where('expires_at', '<=', $now)->delete();
+
+        $minutes = config('auth.expiration');
+        if ($minutes) {
+            $cutoff = date('Y-m-d H:i:s', time() - (int) $minutes * 60);
+            $deleted += PersonalAccessToken::query()->where('created_at', '<=', $cutoff)->delete();
+        }
+
+        $this->line("Deleted $deleted expired token(s).");
         return 0;
     }
 
