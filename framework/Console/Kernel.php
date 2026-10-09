@@ -28,8 +28,18 @@ class Kernel
         'make:middleware' => 'Create a middleware           <Name>',
     ];
 
-    public function __construct(private Application $app)
+    /** @var resource */
+    private $out;
+    /** @var resource */
+    private $err;
+
+    /**
+     * @param resource|null $out where output goes (default STDOUT); errors go there too when given
+     */
+    public function __construct(private Application $app, $out = null)
     {
+        $this->out = $out ?? STDOUT;
+        $this->err = $out ?? STDERR;
     }
 
     public function handle(array $argv): int
@@ -245,12 +255,12 @@ class Kernel
 
     private function line(string $text): void
     {
-        fwrite(STDOUT, $text . PHP_EOL);
+        fwrite($this->out, $text . PHP_EOL);
     }
 
     private function fail(string $message): int
     {
-        fwrite(STDERR, $message . PHP_EOL);
+        fwrite($this->err, $message . PHP_EOL);
         return 1;
     }
 }

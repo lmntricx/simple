@@ -33,7 +33,10 @@ class Application
     {
         static::$instance = $this;
 
-        Env::load($basePath . '/.env');
+        // Tests set APP_ENV=testing (phpunit.xml) and must not pick up your real .env.
+        if (getenv('APP_ENV') !== 'testing') {
+            Env::load($basePath . '/.env');
+        }
         $this->config = Config::fromDirectory($basePath . '/config');
 
         date_default_timezone_set($this->config->get('app.timezone', 'UTC'));

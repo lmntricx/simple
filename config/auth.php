@@ -11,6 +11,9 @@ return [
     // Individual tokens can also be given their own expiry in createToken().
     'expiration' => env('AUTH_TOKEN_EXPIRATION') !== null ? (int) env('AUTH_TOKEN_EXPIRATION') : null,
 
+    // bcrypt cost for password hashes. Each +1 doubles the time; 12 takes ~50-250 ms.
+    'bcrypt_rounds' => (int) env('BCRYPT_ROUNDS', 12),
+
     // ---- Email verification ----
 
     // Minutes a verification link stays valid.

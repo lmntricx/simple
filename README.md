@@ -1,6 +1,6 @@
 # Simple
 
-A small, batteries-included PHP 8.1+ framework for JSON APIs. No dependencies.
+A small, batteries-included PHP 8.2+ framework for JSON APIs. No dependencies.
 
 ```bash
 cp .env.example .env
@@ -142,11 +142,40 @@ MySQL commits schema changes immediately, so a failed migration there may need m
 
 ## Tests
 
+PHPUnit (`composer install` first):
+
 ```
-php tests/orm.php
-php tests/auth.php
-php tests/mail.php
+composer test                          # or vendor/bin/phpunit
+vendor/bin/phpunit --filter PasswordReset
+vendor/bin/phpunit --testsuite Unit
 ```
+
+Tests run on in-memory SQLite and ignore your `.env`. Each test gets a freshly booted app, a fresh database
+with migrations applied, and a fake mailer. Extend `Simple\Testing\TestCase`:
+
+```php
+class PostTest extends TestCase
+{
+    public function test_users_can_create_posts(): void
+    {
+        $user = User::create(['name' => 'Ada', 'email' => 'ada@x.io', 'password' => 'password123']);
+
+        $this->actingAs($user)
+            ->postJson('/posts', ['title' => 'Hello'])
+            ->assertCreated()
+            ->assertJsonPath('data.title', 'Hello');
+
+        $this->assertCount(1, $this->mail->sentTo('ada@x.io'));
+    }
+}
+```
+
+Requests: `getJson postJson putJson patchJson deleteJson`, plus `actingAs($user)`, `withToken($token)`,
+`withServerVariables([...])`. Assertions: `assertStatus assertOk assertCreated assertUnauthorized assertForbidden
+assertNotFound assertUnprocessable assertJsonPath assertJsonMissingPath assertJsonValidationErrors assertHeader`.
+
+GitHub Actions (`.github/workflows/tests.yml`) runs the suite on PHP 8.2–8.4 with SQLite, and on MySQL 8.4 and
+PostgreSQL 17. To run against MySQL locally, set `DB_CONNECTION=mysql` and the `DB_*` variables in your shell.
 
 ## Authentication
 

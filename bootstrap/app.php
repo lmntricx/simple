@@ -4,7 +4,7 @@ use Simple\Application;
 
 $basePath = dirname(__DIR__);
 
-require is_file($basePath . '/vendor/autoload.php')
+require_once is_file($basePath . '/vendor/autoload.php')
     ? $basePath . '/vendor/autoload.php'
     : $basePath . '/framework/autoload.php';
 

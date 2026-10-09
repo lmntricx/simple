@@ -80,8 +80,8 @@ final class PasswordBroker
         Connection::transaction(function () use ($user, $email, $password) {
             // The model's password mutator normally hashes; hash here if it doesn't have one.
             $user->forceFill(['password' => $password]);
-            if (password_get_info((string) $user->getAttribute('password'))['algo'] === null) {
-                $user->forceFill(['password' => password_hash($password, PASSWORD_DEFAULT)]);
+            if (!Hash::isHashed((string) $user->getAttribute('password'))) {
+                $user->forceFill(['password' => Hash::make($password)]);
             }
             $user->save();
 

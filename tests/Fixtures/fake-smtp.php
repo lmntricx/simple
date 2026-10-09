@@ -5,7 +5,7 @@
  * speaks just enough SMTP (plain, AUTH LOGIN), records the whole conversation
  * to {transcript file}, then exits.
  *
- *   php tests/fixtures/fake-smtp.php 2525 /tmp/transcript.txt [password]
+ *   php tests/Fixtures/fake-smtp.php 2525 /tmp/transcript.txt [password]
  */
 
 [, $port, $transcriptFile] = $argv;

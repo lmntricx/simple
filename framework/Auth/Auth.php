@@ -13,12 +13,6 @@ use Simple\Database\Model;
  */
 final class Auth
 {
-    /**
-     * Used when no user matches, so a failed login takes as long whether or not
-     * the account exists (prevents discovering registered emails by timing).
-     */
-    private const DUMMY_HASH = '$2y$12$HCvEswn.V/ROBTLjEGPCAOr0A1wfJndYXMRObVa7hRpJ9JLRXqhOq';
-
     private static ?Model $user = null;
     private static ?PersonalAccessToken $token = null;
 
@@ -68,7 +62,9 @@ final class Auth
         $user = $model::firstWhere(config('auth.username', 'email'), $username);
         $hash = $user?->getAttribute('password');
 
-        $valid = password_verify($password, is_string($hash) ? $hash : self::DUMMY_HASH);
+        // With no user, verify against a dummy hash anyway, so a failed login takes as
+        // long whether or not the account exists (no discovering emails by timing).
+        $valid = Hash::check($password, is_string($hash) ? $hash : Hash::dummy());
 
         return $valid && $user ? $user : null;
     }

@@ -33,6 +33,8 @@ abstract class Model implements JsonSerializable
 {
     protected string $table = '';
     protected string $primaryKey = 'id';
+    /** "int" for auto-increment keys, "string" for UUIDs and other text keys. */
+    protected string $keyType = 'int';
     protected ?string $connection = null;
     protected bool $timestamps = true;
 
@@ -72,11 +74,19 @@ abstract class Model implements JsonSerializable
 
     public static function find(mixed $id): ?static
     {
+        $model = new static();
+
         if ($id === null || $id === '') {
             return null;
         }
 
-        return static::query()->find($id, (new static())->primaryKey);
+        // "/users/abc" can't match an integer key. Bail out early: PostgreSQL
+        // would otherwise raise an error comparing an integer column to text.
+        if ($model->keyType === 'int' && !is_int($id) && !ctype_digit((string) $id)) {
+            return null;
+        }
+
+        return static::query()->find($id, $model->primaryKey);
     }
 
     /**
@@ -293,7 +303,15 @@ abstract class Model implements JsonSerializable
     {
         return array_filter(
             $this->attributes,
-            fn ($value, $key) => !array_key_exists($key, $this->original) || $this->original[$key] !== $value,
+            function ($value, $key) {
+                if (!array_key_exists($key, $this->original)) {
+                    return true;
+                }
+                // Compare cast values, so a DB that returns true and a model holding 1 aren't "different".
+                return isset($this->casts[$key])
+                    ? $this->castGet($key, $this->original[$key]) !== $this->castGet($key, $value)
+                    : $this->original[$key] !== $value;
+            },
             ARRAY_FILTER_USE_BOTH,
         );
     }
