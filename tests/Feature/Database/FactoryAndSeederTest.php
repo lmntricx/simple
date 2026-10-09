@@ -7,7 +7,7 @@ use Database\Factories\UserFactory;
 use Simple\Console\Kernel;
 use Simple\Database\Factory;
 use Simple\Database\Schema\Schema;
-use Simple\Testing\TestCase;
+use Tests\TestCase;
 
 class FactoryAndSeederTest extends TestCase
 {

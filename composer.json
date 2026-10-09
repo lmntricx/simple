@@ -1,40 +1,55 @@
 {
-    "name": "prism/simple",
-    "description": "A small, batteries-included PHP API framework.",
+    "name": "lmntricx/simple",
+    "description": "Starter app for the Simple PHP framework.",
     "type": "project",
     "license": "MIT",
     "require": {
         "php": ">=8.2",
-        "ext-pdo": "*",
-        "ext-json": "*",
-        "ext-mbstring": "*"
+        "lmntricx/simple-framework": "@dev"
     },
     "require-dev": {
         "phpunit/phpunit": "^11.5"
     },
+    "repositories": [
+        {
+            "type": "path",
+            "url": "framework",
+            "options": {
+                "symlink": true
+            }
+        }
+    ],
     "autoload": {
         "psr-4": {
-            "Simple\\": "framework/",
             "App\\": "app/",
             "Database\\Factories\\": "database/factories/",
             "Database\\Seeders\\": "database/seeders/"
-        },
-        "files": [
-            "framework/helpers.php"
-        ]
+        }
     },
     "autoload-dev": {
         "psr-4": {
-            "Tests\\": "tests/"
+            "Tests\\": "tests/",
+            "Simple\\Tests\\": "framework/tests/"
         }
     },
     "scripts": {
-        "test": "phpunit"
+        "test": [
+            "phpunit",
+            "phpunit -c framework/phpunit.xml"
+        ],
+        "post-root-package-install": [
+            "@php -r \"file_exists('.env') || copy('.env.example', '.env');\""
+        ],
+        "post-create-project-cmd": [
+            "@php simple key:generate"
+        ]
     },
     "config": {
         "sort-packages": true,
         "platform": {
             "php": "8.2.0"
         }
-    }
+    },
+    "minimum-stability": "stable",
+    "prefer-stable": true
 }

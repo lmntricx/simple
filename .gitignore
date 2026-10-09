@@ -12,3 +12,6 @@
 /storage/app/*
 !/storage/app/.gitkeep
 /database/*.sqlite
+/framework/vendor/
+/framework/composer.lock
+/framework/.phpunit.cache/

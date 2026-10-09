@@ -4,8 +4,64 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "85bfab25cb98f93dd3a11c3e6fee4af1",
-    "packages": [],
+    "content-hash": "9b08238f25f59394154bf6e4571d9be2",
+    "packages": [
+        {
+            "name": "lmntricx/simple-framework",
+            "version": "dev-main",
+            "dist": {
+                "type": "path",
+                "url": "framework",
+                "reference": "190e82c44f5388c1e7e59c778fcfc10bd071eda1"
+            },
+            "require": {
+                "ext-fileinfo": "*",
+                "ext-json": "*",
+                "ext-mbstring": "*",
+                "ext-pdo": "*",
+                "php": ">=8.2"
+            },
+            "require-dev": {
+                "phpunit/phpunit": "^11.5"
+            },
+            "suggest": {
+                "phpunit/phpunit": "Required to use Simple\\Testing\\TestCase in your tests."
+            },
+            "type": "library",
+            "autoload": {
+                "psr-4": {
+                    "Simple\\": "src/"
+                },
+                "files": [
+                    "src/helpers.php"
+                ]
+            },
+            "autoload-dev": {
+                "psr-4": {
+                    "Simple\\Tests\\": "tests/"
+                }
+            },
+            "scripts": {
+                "test": [
+                    "phpunit"
+                ]
+            },
+            "license": [
+                "MIT"
+            ],
+            "description": "A small, batteries-included PHP framework for JSON APIs: routing, ORM, migrations, auth, queues, scheduling, mail and more, with no runtime dependencies.",
+            "keywords": [
+                "api",
+                "framework",
+                "orm",
+                "rest"
+            ],
+            "transport-options": {
+                "symlink": true,
+                "relative": true
+            }
+        }
+    ],
     "packages-dev": [
         {
             "name": "myclabs/deep-copy",
@@ -1774,14 +1830,13 @@
     ],
     "aliases": [],
     "minimum-stability": "stable",
-    "stability-flags": {},
-    "prefer-stable": false,
+    "stability-flags": {
+        "lmntricx/simple-framework": 20
+    },
+    "prefer-stable": true,
     "prefer-lowest": false,
     "platform": {
-        "php": ">=8.2",
-        "ext-pdo": "*",
-        "ext-json": "*",
-        "ext-mbstring": "*"
+        "php": ">=8.2"
     },
     "platform-dev": {},
     "platform-overrides": {

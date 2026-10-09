@@ -46,13 +46,13 @@ jobs:
       - uses: shivammathur/setup-php@v2
         with:
           php-version: ${{ matrix.php }}
-          extensions: pdo, pdo_sqlite, pdo_mysql, pdo_pgsql, mbstring
+          extensions: pdo, pdo_sqlite, pdo_mysql, pdo_pgsql, mbstring, fileinfo
           coverage: none
 
       - name: Install dependencies
         run: composer install --no-interaction --no-progress --prefer-dist
 
-      - name: Run tests
+      - name: Run app and framework tests
         env:
           DB_CONNECTION: ${{ matrix.db }}
           DB_HOST: 127.0.0.1
@@ -60,4 +60,6 @@ jobs:
           DB_DATABASE: simple_test
           DB_USERNAME: ${{ matrix.db == 'mysql' && 'root' || 'postgres' }}
           DB_PASSWORD: ${{ matrix.db == 'mysql' && 'root' || 'postgres' }}
-        run: vendor/bin/phpunit
+        run: |
+          vendor/bin/phpunit
+          vendor/bin/phpunit -c framework/phpunit.xml

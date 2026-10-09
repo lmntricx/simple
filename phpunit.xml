@@ -7,22 +7,18 @@
          failOnWarning="true"
          failOnRisky="true">
     <testsuites>
-        <testsuite name="Unit">
-            <directory>tests/Unit</directory>
-        </testsuite>
-        <testsuite name="Feature">
+        <testsuite name="App">
             <directory>tests/Feature</directory>
         </testsuite>
     </testsuites>
 
     <source>
         <include>
-            <directory>framework</directory>
             <directory>app</directory>
         </include>
     </source>
 
-    <!-- Defaults; CI overrides DB_* to run the suite on MySQL and PostgreSQL. -->
+    <!-- App tests. The framework has its own suite: vendor/bin/phpunit -c framework/phpunit.xml -->
     <php>
         <env name="APP_ENV" value="testing" force="true"/>
         <env name="APP_DEBUG" value="true"/>

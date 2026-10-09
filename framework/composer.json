@@ -1,0 +1,43 @@
+{
+    "name": "lmntricx/simple-framework",
+    "description": "A small, batteries-included PHP framework for JSON APIs: routing, ORM, migrations, auth, queues, scheduling, mail and more, with no runtime dependencies.",
+    "type": "library",
+    "license": "MIT",
+    "keywords": ["framework", "api", "orm", "rest"],
+    "require": {
+        "php": ">=8.2",
+        "ext-fileinfo": "*",
+        "ext-json": "*",
+        "ext-mbstring": "*",
+        "ext-pdo": "*"
+    },
+    "require-dev": {
+        "phpunit/phpunit": "^11.5"
+    },
+    "suggest": {
+        "phpunit/phpunit": "Required to use Simple\\Testing\\TestCase in your tests."
+    },
+    "autoload": {
+        "psr-4": {
+            "Simple\\": "src/"
+        },
+        "files": [
+            "src/helpers.php"
+        ]
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "Simple\\Tests\\": "tests/"
+        }
+    },
+    "scripts": {
+        "test": "phpunit"
+    },
+    "config": {
+        "sort-packages": true,
+        "platform": {
+            "php": "8.2.0"
+        }
+    },
+    "minimum-stability": "stable"
+}

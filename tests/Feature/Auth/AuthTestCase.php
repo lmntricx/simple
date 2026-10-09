@@ -3,7 +3,7 @@
 namespace Tests\Feature\Auth;
 
 use App\Models\User;
-use Simple\Testing\TestCase;
+use Tests\TestCase;
 
 abstract class AuthTestCase extends TestCase
 {
