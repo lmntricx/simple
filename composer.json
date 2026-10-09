@@ -15,7 +15,9 @@
     "autoload": {
         "psr-4": {
             "Simple\\": "framework/",
-            "App\\": "app/"
+            "App\\": "app/",
+            "Database\\Factories\\": "database/factories/",
+            "Database\\Seeders\\": "database/seeders/"
         },
         "files": [
             "framework/helpers.php"

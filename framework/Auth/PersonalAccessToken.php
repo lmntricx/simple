@@ -3,6 +3,7 @@
 namespace Simple\Auth;
 
 use Simple\Database\Model;
+use Simple\Database\Relations\BelongsTo;
 
 /**
  * An API token. The plain-text token ("{id}|{secret}") is only shown once, when
@@ -50,11 +51,8 @@ class PersonalAccessToken extends Model
             && strtotime($this->created_at) + ((int) $minutes * 60) <= time();
     }
 
-    public function user(): ?Model
+    public function user(): BelongsTo
     {
-        /** @var class-string<Model> $model */
-        $model = config('auth.model');
-
-        return $model::find($this->user_id);
+        return $this->belongsTo(config('auth.model'), 'user_id');
     }
 }

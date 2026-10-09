@@ -3,6 +3,7 @@
 namespace Tests\Fixtures\Models;
 
 use Simple\Database\Model;
+use Simple\Database\Relations\BelongsTo;
 
 class Post extends Model
 {
@@ -10,7 +11,7 @@ class Post extends Model
     protected ?array $guarded = [];
     protected array $casts = ['id' => 'int', 'user_id' => 'int', 'views' => 'int'];
 
-    public function author(): ?User
+    public function author(): BelongsTo
     {
         return $this->belongsTo(User::class, 'user_id');
     }

@@ -20,12 +20,16 @@ class Kernel
         'migrate' => 'Run pending migrations',
         'migrate:rollback' => 'Undo the last batch of migrations',
         'migrate:status' => 'Show which migrations have run',
+        'db:seed' => 'Run database/seeders/DatabaseSeeder  [--class=Name]',
+        'db:fresh' => 'Drop all tables, re-run migrations [--seed] [--force in production]',
         'auth:prune' => 'Delete expired API tokens and password reset tokens',
         'key:generate' => 'Set APP_KEY in .env              [--show to print only, --force to replace]',
         'make:migration' => 'Create a migration            <name>, e.g. create_posts_table',
         'make:controller' => 'Create a controller           <Name>',
         'make:model' => 'Create a model                <Name> [-m to add a migration]',
         'make:middleware' => 'Create a middleware           <Name>',
+        'make:factory' => 'Create a model factory        <Model>, e.g. Post',
+        'make:seeder' => 'Create a seeder               <Name>, e.g. PostSeeder',
     ];
 
     /** @var resource */
@@ -54,12 +58,16 @@ class Kernel
             'migrate' => $this->migrate(),
             'migrate:rollback' => $this->rollback(),
             'migrate:status' => $this->status(),
+            'db:seed' => $this->seed($options),
+            'db:fresh' => $this->fresh($options),
             'auth:prune' => $this->pruneTokens(),
             'key:generate' => $this->generateKey($options),
             'make:migration' => $this->makeMigration($args[0] ?? null),
             'make:controller' => $this->make('controller', $args[0] ?? null),
             'make:model' => $this->makeModel($args[0] ?? null, in_array('-m', $options, true)),
             'make:middleware' => $this->make('middleware', $args[0] ?? null),
+            'make:factory' => $this->makeFactory($args[0] ?? null),
+            'make:seeder' => $this->make('seeder', $args[0] ?? null),
             'help', '--help', '-h', 'list' => $this->help(),
             default => $this->fail("Unknown command [$command]. Run `php simple help`."),
         };
@@ -226,10 +234,60 @@ class Kernel
             return $this->fail("Usage: php simple make:$type <Name>  (StudlyCase, e.g. Post)");
         }
 
-        $folder = ['controller' => 'Controllers', 'model' => 'Models', 'middleware' => 'Middleware'][$type];
-        $path = "{$this->app->basePath}/app/$folder/$name.php";
+        $folder = [
+            'controller' => 'app/Controllers',
+            'model' => 'app/Models',
+            'middleware' => 'app/Middleware',
+            'seeder' => 'database/seeders',
+        ][$type];
+        $path = "{$this->app->basePath}/$folder/$name.php";
 
         return $this->write($path, $this->stub($type, ['{{class}}' => $name]));
+    }
+
+    private function makeFactory(?string $model): int
+    {
+        if (!$model || !preg_match('/^[A-Z][A-Za-z0-9]*$/', $model)) {
+            return $this->fail('Usage: php simple make:factory <Model>  (e.g. Post)');
+        }
+
+        $path = "{$this->app->basePath}/database/factories/{$model}Factory.php";
+
+        return $this->write($path, $this->stub('factory', ['{{model}}' => $model]));
+    }
+
+    private function seed(array $options): int
+    {
+        $class = 'DatabaseSeeder';
+        foreach ($options as $option) {
+            if (str_starts_with($option, '--class=')) {
+                $class = substr($option, 8);
+            }
+        }
+
+        $class = str_contains($class, '\\') ? $class : "Database\\Seeders\\$class";
+        if (!class_exists($class)) {
+            return $this->fail("Seeder [$class] not found.");
+        }
+
+        $this->app->make($class)->run();
+        $this->line("Seeded: $class");
+
+        return 0;
+    }
+
+    private function fresh(array $options): int
+    {
+        if ($this->app->config->get('app.env') === 'production' && !in_array('--force', $options, true)) {
+            return $this->fail('db:fresh deletes all data. Refusing in production without --force.');
+        }
+
+        Schema::dropAllTables();
+        $this->line('Dropped all tables.');
+
+        $code = $this->migrate();
+
+        return $code === 0 && in_array('--seed', $options, true) ? $this->seed($options) : $code;
     }
 
     private function stub(string $name, array $replace): string

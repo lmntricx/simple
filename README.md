@@ -16,6 +16,8 @@ app/                  your code: Controllers, Models, Middleware
 bootstrap/app.php     creates the Application and loads routes
 config/               app.php, database.php, cors.php (any file here is readable via config('file.key'))
 database/migrations/  schema changes, run with `php simple migrate`
+database/factories/   fake-data builders for tests and seeding
+database/seeders/     `php simple db:seed`
 framework/            the framework itself (namespace Simple\)
 public/index.php      the only web entry point; point your web server here
 routes/api.php        route definitions
@@ -102,8 +104,9 @@ class Post extends Model
     protected array $hidden = [];
     protected array $casts = ['published' => 'bool', 'meta' => 'array'];
 
-    public function author(): ?User { return $this->belongsTo(User::class, 'user_id'); }
-    public function comments(): QueryBuilder { return $this->hasMany(Comment::class); }   // comments.post_id
+    public function author(): BelongsTo { return $this->belongsTo(User::class, 'user_id'); }
+    public function comments(): HasMany { return $this->hasMany(Comment::class); }   // comments.post_id
+    public function cover(): HasOne { return $this->hasOne(Image::class); }          // images.post_id
 }
 
 Post::create([...]);
@@ -117,10 +120,19 @@ $post->comments;                      // to-many as a property: array of models
 $post->comments()->latest()->get();   // method: a query you can keep refining
 ```
 
-Relation methods must be public, take no arguments and declare a `Model` or `QueryBuilder` return type to be
-usable as properties. A relation's own constraint can't be widened: `$post->comments()->orWhere(...)` only ever
-returns that post's comments. Relations load lazily (one query per access), so in a loop over many models
-prefer one `whereIn()` query over accessing the relation on each.
+Relation methods must be public, take no arguments and declare a `BelongsTo`/`HasMany`/`HasOne` return type. A
+relation's own constraint can't be widened: `$post->comments()->orWhere(...)` only ever returns that post's comments.
+
+**Eager loading.** Accessing a relation on each model in a loop runs one query per model. Load it up front instead,
+one query per relation:
+
+```php
+Post::with('author', 'comments.author')->latest()->paginate(20);   // 3 queries, however many posts
+$post->load('comments');                                           // for a model you already have
+```
+
+**Debugging queries:** `Connection::enableQueryLog()` … `Connection::getQueryLog()` lists every query with its
+bindings and time.
 
 Transactions: `Connection::transaction(function () { ... })` commits, or rolls back if the closure throws.
 
@@ -131,6 +143,39 @@ transform a value before it's stored (see `User::setPasswordAttribute`).
 The query builder (`Model::query()`, or `new QueryBuilder($pdo, 'table')` for plain arrays) supports
 `select where orWhere whereNull whereNotNull whereIn whereNotIn join leftJoin orderBy latest limit offset get first find pluck count exists paginate insert update delete raw`.
 Column names are validated, so they can't be used for SQL injection; values are always bound.
+
+## Factories and seeders
+
+Factories build models with fake data (`database/factories`, one per model, used via `use HasFactory`):
+
+```php
+class UserFactory extends Factory
+{
+    protected string $model = User::class;
+
+    public function definition(): array
+    {
+        return ['name' => $this->fake->name(), 'email' => $this->fake->email(), 'password' => 'password'];
+    }
+
+    public function unverified(): static { return $this->state(['email_verified_at' => null]); }
+}
+
+User::factory()->create();                                // saved
+User::factory()->count(10)->unverified()->create();       // array of 10
+User::factory()->make(['name' => 'Ada']);                 // not saved
+// In a definition, 'user_id' => UserFactory::new() creates the related model.
+```
+
+`fake()` generates names, emails (unique), words, sentences, numbers, dates and UUIDs; `fake()->seed(1)` makes it
+repeatable. Seeders live in `database/seeders`; `DatabaseSeeder` creates `test@example.com` / `password` and 10
+random users:
+
+```
+php simple db:seed                       # DatabaseSeeder
+php simple db:seed --class=PostSeeder
+php simple db:fresh --seed               # drop everything, migrate, seed (refuses in production without --force)
+```
 
 ## Migrations
 
@@ -310,12 +355,15 @@ Built in: `auth`, `verified`, `ability:a,b`, `throttle:maxAttempts,minutes`.
 php simple serve [--port=8000]
 php simple routes
 php simple migrate | migrate:rollback | migrate:status
+php simple db:seed [--class=Name] | db:fresh [--seed]
 php simple auth:prune
 php simple key:generate [--show] [--force]
 php simple make:controller PostController
 php simple make:model Post -m
 php simple make:migration add_slug_to_posts
 php simple make:middleware Authenticate
+php simple make:factory Post
+php simple make:seeder PostSeeder
 ```
 
 ## Deploying on Apache

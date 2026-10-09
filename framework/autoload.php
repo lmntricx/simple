@@ -9,6 +9,8 @@ spl_autoload_register(function (string $class): void {
     $prefixes = [
         'Simple\\' => __DIR__ . '/',
         'App\\' => dirname(__DIR__) . '/app/',
+        'Database\\Factories\\' => dirname(__DIR__) . '/database/factories/',
+        'Database\\Seeders\\' => dirname(__DIR__) . '/database/seeders/',
     ];
 
     foreach ($prefixes as $prefix => $dir) {

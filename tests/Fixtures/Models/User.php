@@ -3,7 +3,8 @@
 namespace Tests\Fixtures\Models;
 
 use Simple\Database\Model;
-use Simple\Database\QueryBuilder;
+use Simple\Database\Relations\HasMany;
+use Simple\Database\Relations\HasOne;
 
 class User extends Model
 {
@@ -12,12 +13,12 @@ class User extends Model
     protected array $hidden = ['password'];
     protected array $casts = ['id' => 'int', 'active' => 'bool', 'settings' => 'array'];
 
-    public function posts(): QueryBuilder
+    public function posts(): HasMany
     {
         return $this->hasMany(Post::class);
     }
 
-    public function profile(): ?Profile
+    public function profile(): HasOne
     {
         return $this->hasOne(Profile::class);
     }

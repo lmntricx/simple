@@ -1,0 +1,19 @@
+<?php
+
+namespace Database\Factories;
+
+use App\Models\{{model}};
+use Simple\Database\Factory;
+
+class {{model}}Factory extends Factory
+{
+    protected string $model = {{model}}::class;
+
+    public function definition(): array
+    {
+        return [
+            // 'title' => $this->fake->sentence(),
+            // 'user_id' => UserFactory::new(),   // creates a related user
+        ];
+    }
+}

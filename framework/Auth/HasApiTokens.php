@@ -3,7 +3,7 @@
 namespace Simple\Auth;
 
 use DateTimeInterface;
-use Simple\Database\QueryBuilder;
+use Simple\Database\Relations\HasMany;
 
 /**
  * Add to your user model:  class User extends Model { use HasApiTokens; }
@@ -28,7 +28,7 @@ trait HasApiTokens
         return new NewAccessToken($token, $token->id . '|' . $secret);
     }
 
-    public function tokens(): QueryBuilder
+    public function tokens(): HasMany
     {
         return $this->hasMany(PersonalAccessToken::class, 'user_id');
     }

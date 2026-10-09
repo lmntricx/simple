@@ -1,0 +1,13 @@
+<?php
+
+namespace Database\Seeders;
+
+use Simple\Database\Seeder;
+
+class {{class}} extends Seeder
+{
+    public function run(): void
+    {
+        // Post::factory()->count(20)->create();
+    }
+}

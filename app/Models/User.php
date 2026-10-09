@@ -4,11 +4,13 @@ namespace App\Models;
 
 use Simple\Auth\Hash;
 use Simple\Auth\HasApiTokens;
+use Simple\Database\HasFactory;
 use Simple\Database\Model;
 
 class User extends Model
 {
     use HasApiTokens;
+    use HasFactory;
 
     protected array $fillable = ['name', 'email', 'password'];
 

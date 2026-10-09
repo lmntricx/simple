@@ -19,7 +19,7 @@ class Authenticate implements Middleware
     {
         $plainText = $request->bearerToken();
         $token = $plainText ? PersonalAccessToken::findToken($plainText) : null;
-        $user = $token && !$token->isExpired() ? $token->user() : null;
+        $user = $token && !$token->isExpired() ? $token->user : null;
 
         if ($user === null) {
             return Response::error('Unauthenticated', 401)->header('WWW-Authenticate', 'Bearer');

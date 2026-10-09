@@ -28,6 +28,8 @@ class QueryBuilder
     protected ?int $offset = null;
     /** Number of leading wheres that are always ANDed with the rest (see lockConstraints). */
     protected int $lockedWheres = 0;
+    /** Relations to eager load on the results (model queries only). */
+    protected array $eagerLoad = [];
 
     /** @param class-string<Model>|null $model */
     public function __construct(
@@ -162,11 +164,35 @@ class QueryBuilder
         return $this;
     }
 
+    /**
+     * Eager load relations with the results, one query per relation instead
+     * of one per row: Post::with('author', 'comments.author')->get()
+     */
+    public function with(string ...$relations): static
+    {
+        if ($this->model === null) {
+            throw new \LogicException('with() only works on model queries.');
+        }
+
+        array_push($this->eagerLoad, ...$relations);
+        return $this;
+    }
+
     public function get(): array
     {
         $rows = $this->run($this->toSql(), $this->bindings)->fetchAll(PDO::FETCH_ASSOC);
 
-        return $this->model ? $this->model::hydrate($rows) : $rows;
+        if ($this->model === null) {
+            return $rows;
+        }
+
+        $models = $this->model::hydrate($rows);
+
+        if ($this->eagerLoad !== []) {
+            $this->model::eagerLoadRelations($models, $this->eagerLoad);
+        }
+
+        return $models;
     }
 
     public function first(): mixed
@@ -466,8 +492,11 @@ class QueryBuilder
 
     protected function run(string $sql, array $bindings): PDOStatement
     {
+        $start = hrtime(true);
         $statement = $this->connection->prepare($sql);
         $statement->execute($bindings);
+        Connection::logQuery($sql, $bindings, (hrtime(true) - $start) / 1e6);
+
         return $statement;
     }
 }

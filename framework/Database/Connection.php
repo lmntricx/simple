@@ -64,6 +64,38 @@ final class Connection
         }
     }
 
+    // ---- Query log (debugging / tests) ----
+
+    private static ?array $queryLog = null;
+
+    /**
+     * Record every query run through the query builder until disableQueryLog().
+     */
+    public static function enableQueryLog(): void
+    {
+        self::$queryLog = [];
+    }
+
+    public static function disableQueryLog(): void
+    {
+        self::$queryLog = null;
+    }
+
+    /**
+     * @return array<int, array{sql: string, bindings: array, ms: float}>
+     */
+    public static function getQueryLog(): array
+    {
+        return self::$queryLog ?? [];
+    }
+
+    public static function logQuery(string $sql, array $bindings, float $ms): void
+    {
+        if (self::$queryLog !== null) {
+            self::$queryLog[] = ['sql' => $sql, 'bindings' => $bindings, 'ms' => round($ms, 3)];
+        }
+    }
+
     public static function driver(PDO $pdo): string
     {
         return $pdo->getAttribute(PDO::ATTR_DRIVER_NAME);

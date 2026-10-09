@@ -2,10 +2,13 @@
 
 namespace App\Models;
 
+use Simple\Database\HasFactory;
 use Simple\Database\Model;
 
 class {{class}} extends Model
 {
+    use HasFactory;
+
     protected array $fillable = [];
 
     protected array $hidden = [];

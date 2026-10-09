@@ -4,6 +4,10 @@ namespace Simple\Database;
 
 use JsonSerializable;
 use PDO;
+use Simple\Database\Relations\BelongsTo;
+use Simple\Database\Relations\HasMany;
+use Simple\Database\Relations\HasOne;
+use Simple\Database\Relations\Relation;
 use Simple\Http\HttpException;
 use Simple\Support\Str;
 
@@ -20,6 +24,7 @@ use Simple\Support\Str;
  * Define set{Name}Attribute($value) to transform a value before it is stored,
  * e.g. setPasswordAttribute() to hash passwords.
  *
+ * @method static QueryBuilder with(string ...$relations)
  * @method static QueryBuilder where(string $column, mixed $operator = null, mixed $value = null)
  * @method static QueryBuilder whereIn(string $column, array $values)
  * @method static QueryBuilder whereNull(string $column)
@@ -249,11 +254,8 @@ abstract class Model implements JsonSerializable
     }
 
     /**
-     * $post->author calls $post->author() once and caches the result; for
-     * to-many relations (returning a QueryBuilder) the rows are fetched.
-     *
-     * Only public, parameterless methods declared on your model whose return
-     * type is a Model or QueryBuilder count as relations.
+     * $post->author runs the author() relation once and caches the result
+     * (unless it was already eager loaded with with()/load()).
      */
     protected function getRelationValue(string $key): mixed
     {
@@ -261,27 +263,11 @@ abstract class Model implements JsonSerializable
             return $this->relations[$key];
         }
 
-        if (!method_exists($this, $key)) {
+        if (!$this->isRelation($key)) {
             return null;
         }
 
-        $method = new \ReflectionMethod($this, $key);
-        $type = $method->getReturnType();
-
-        if (
-            $method->getDeclaringClass()->getName() === self::class
-            || !$method->isPublic()
-            || $method->isStatic()
-            || $method->getNumberOfRequiredParameters() > 0
-            || !$type instanceof \ReflectionNamedType
-            || !(is_a($type->getName(), Model::class, true) || is_a($type->getName(), QueryBuilder::class, true))
-        ) {
-            return null;
-        }
-
-        $result = $this->$key();
-
-        return $this->relations[$key] = $result instanceof QueryBuilder ? $result->get() : $result;
+        return $this->relations[$key] = $this->$key()->getResults();
     }
 
     public function setAttribute(string $key, mixed $value): void
@@ -373,34 +359,106 @@ abstract class Model implements JsonSerializable
     /**
      * $user->hasOne(Profile::class) => profiles.user_id = users.id
      */
-    protected function hasOne(string $related, ?string $foreignKey = null, ?string $localKey = null): ?Model
+    protected function hasOne(string $related, ?string $foreignKey = null, ?string $localKey = null): HasOne
     {
-        $foreignKey ??= $this->foreignKeyName();
-        return $related::query()->where($foreignKey, $this->getAttribute($localKey ?? $this->primaryKey))->first();
+        return new HasOne($this, $related, $foreignKey ?? $this->foreignKeyName(), $localKey ?? $this->primaryKey);
     }
 
     /**
      * $user->hasMany(Post::class) => posts.user_id = users.id
      */
-    protected function hasMany(string $related, ?string $foreignKey = null, ?string $localKey = null): QueryBuilder
+    protected function hasMany(string $related, ?string $foreignKey = null, ?string $localKey = null): HasMany
     {
-        $foreignKey ??= $this->foreignKeyName();
-
-        // Locked, so a later ->orWhere() can't widen the query to other owners' rows.
-        return $related::query()
-            ->where($foreignKey, $this->getAttribute($localKey ?? $this->primaryKey))
-            ->lockConstraints();
+        return new HasMany($this, $related, $foreignKey ?? $this->foreignKeyName(), $localKey ?? $this->primaryKey);
     }
 
     /**
      * $post->belongsTo(User::class) => users.id = posts.user_id
      */
-    protected function belongsTo(string $related, ?string $foreignKey = null, string $ownerKey = 'id'): ?Model
+    protected function belongsTo(string $related, ?string $foreignKey = null, string $ownerKey = 'id'): BelongsTo
     {
         $foreignKey ??= Str::snake((new \ReflectionClass($related))->getShortName()) . '_id';
-        $value = $this->getAttribute($foreignKey);
 
-        return $value === null ? null : $related::query()->where($ownerKey, $value)->first();
+        return new BelongsTo($this, $related, $foreignKey, $ownerKey);
+    }
+
+    /**
+     * Eager load relations on models already fetched: $post->load('author', 'comments.author').
+     */
+    public function load(string ...$relations): static
+    {
+        static::eagerLoadRelations([$this], $relations);
+        return $this;
+    }
+
+    public function setRelation(string $name, mixed $value): static
+    {
+        $this->relations[$name] = $value;
+        return $this;
+    }
+
+    public function relationLoaded(string $name): bool
+    {
+        return array_key_exists($name, $this->relations);
+    }
+
+    /**
+     * Load relations for many models with one query per relation.
+     * Dot notation loads nested relations: 'posts.comments'.
+     *
+     * @param static[] $models
+     * @param string[] $relations
+     */
+    public static function eagerLoadRelations(array $models, array $relations): void
+    {
+        if ($models === []) {
+            return;
+        }
+
+        // ['posts.comments', 'posts.author', 'profile'] => ['posts' => ['comments', 'author'], 'profile' => []]
+        $tree = [];
+        foreach ($relations as $relation) {
+            [$name, $nested] = array_pad(explode('.', $relation, 2), 2, null);
+            $tree[$name] ??= [];
+            if ($nested !== null) {
+                $tree[$name][] = $nested;
+            }
+        }
+
+        foreach ($tree as $name => $nested) {
+            $first = $models[0];
+
+            if (!$first->isRelation($name)) {
+                throw new \InvalidArgumentException("[$name] is not a relationship on " . $first::class . '.');
+            }
+
+            $loaded = $first->$name()->eagerLoad($models, $name);
+
+            if ($nested !== [] && $loaded !== []) {
+                $loaded[0]::eagerLoadRelations($loaded, $nested);
+            }
+        }
+    }
+
+    /**
+     * Relationship methods are public, parameterless methods declared on your
+     * model with a Relation return type.
+     */
+    public function isRelation(string $name): bool
+    {
+        if (!method_exists($this, $name)) {
+            return false;
+        }
+
+        $method = new \ReflectionMethod($this, $name);
+        $type = $method->getReturnType();
+
+        return $method->getDeclaringClass()->getName() !== self::class
+            && $method->isPublic()
+            && !$method->isStatic()
+            && $method->getNumberOfRequiredParameters() === 0
+            && $type instanceof \ReflectionNamedType
+            && is_a($type->getName(), Relation::class, true);
     }
 
     protected function foreignKeyName(): string

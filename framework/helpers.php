@@ -44,6 +44,13 @@ if (!function_exists('storage_path')) {
     }
 }
 
+if (!function_exists('fake')) {
+    function fake(): \Simple\Support\Fake
+    {
+        return \Simple\Support\Fake::instance();
+    }
+}
+
 if (!function_exists('abort')) {
     function abort(int $status, string $message = '', mixed $errors = null): never
     {
