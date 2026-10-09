@@ -2,8 +2,10 @@
 
 namespace Simple\Database;
 
+use Closure;
 use InvalidArgumentException;
 use PDO;
+use PDOException;
 use PDOStatement;
 
 /**
@@ -24,6 +26,8 @@ class QueryBuilder
     protected array $orders = [];
     protected ?int $limit = null;
     protected ?int $offset = null;
+    /** Number of leading wheres that are always ANDed with the rest (see lockConstraints). */
+    protected int $lockedWheres = 0;
 
     /** @param class-string<Model>|null $model */
     public function __construct(
@@ -33,6 +37,9 @@ class QueryBuilder
     ) {
     }
 
+    /**
+     * select('id', 'name'), select('users.*'), select('name as author')
+     */
     public function select(string ...$columns): static
     {
         $this->columns = $columns ?: ['*'];
@@ -40,16 +47,28 @@ class QueryBuilder
     }
 
     /**
-     * where('age', 18), where('age', '>=', 18), where('deleted_at', null)
+     * where('age', 18), where('age', '>=', 18), where('deleted_at', null),
+     * where(fn (QueryBuilder $q) => $q->where('a', 1)->orWhere('b', 2))  // grouped in parentheses
      */
-    public function where(string $column, mixed $operator = null, mixed $value = null): static
+    public function where(string|Closure $column, mixed $operator = null, mixed $value = null): static
     {
         return $this->addWhere('AND', func_num_args() === 2, $column, $operator, $value);
     }
 
-    public function orWhere(string $column, mixed $operator = null, mixed $value = null): static
+    public function orWhere(string|Closure $column, mixed $operator = null, mixed $value = null): static
     {
         return $this->addWhere('OR', func_num_args() === 2, $column, $operator, $value);
+    }
+
+    /**
+     * Make the wheres added so far mandatory: later orWhere() calls are grouped
+     * so they can't escape them. Relations use this so that
+     * $user->posts()->orWhere(...) never returns another user's posts.
+     */
+    public function lockConstraints(): static
+    {
+        $this->lockedWheres = count($this->wheres);
+        return $this;
     }
 
     public function whereNull(string $column): static
@@ -73,7 +92,20 @@ class QueryBuilder
 
         $placeholders = implode(', ', array_fill(0, count($values), '?'));
         $this->wheres[] = ['boolean' => 'AND', 'sql' => $this->wrap($column) . " IN ($placeholders)"];
-        array_push($this->bindings, ...array_values($values));
+        array_push($this->bindings, ...array_map([$this, 'bindable'], array_values($values)));
+
+        return $this;
+    }
+
+    public function whereNotIn(string $column, array $values): static
+    {
+        if ($values === []) {
+            return $this;
+        }
+
+        $placeholders = implode(', ', array_fill(0, count($values), '?'));
+        $this->wheres[] = ['boolean' => 'AND', 'sql' => $this->wrap($column) . " NOT IN ($placeholders)"];
+        array_push($this->bindings, ...array_map([$this, 'bindable'], array_values($values)));
 
         return $this;
     }
@@ -148,19 +180,30 @@ class QueryBuilder
         return (clone $this)->where($key, $id)->first();
     }
 
-    public function count(): int
+    /**
+     * Values of a single column: pluck('email') => ['a@x.io', ...]
+     */
+    public function pluck(string $column): array
     {
         $query = clone $this;
-        $query->columns = ['COUNT(*) AS aggregate'];
-        $query->orders = [];
-        $query->limit = $query->offset = null;
+        $query->columns = [$column];
+        $query->model = null;
 
-        return (int) $query->run($query->toSql(), $query->bindings)->fetchColumn();
+        return $query->run($query->toSql(), $query->bindings)->fetchAll(PDO::FETCH_COLUMN);
+    }
+
+    public function count(): int
+    {
+        $sql = 'SELECT COUNT(*) FROM ' . $this->compileFromAndWheres();
+
+        return (int) $this->run($sql, $this->bindings)->fetchColumn();
     }
 
     public function exists(): bool
     {
-        return $this->count() > 0;
+        $sql = 'SELECT 1 FROM ' . $this->compileFromAndWheres() . ' LIMIT 1';
+
+        return $this->run($sql, $this->bindings)->fetchColumn() !== false;
     }
 
     /**
@@ -168,6 +211,7 @@ class QueryBuilder
      */
     public function paginate(int $perPage = 15, int $page = 1): array
     {
+        $perPage = max(1, $perPage);
         $page = max(1, $page);
         $total = $this->count();
         $items = (clone $this)->limit($perPage)->offset(($page - 1) * $perPage)->get();
@@ -195,9 +239,17 @@ class QueryBuilder
         $columns = implode(', ', array_map(fn ($c) => $this->wrap($c), array_keys($values)));
         $placeholders = implode(', ', array_fill(0, count($values), '?'));
 
-        $this->run("INSERT INTO {$this->wrap($this->table)} ($columns) VALUES ($placeholders)", array_values($values));
+        $this->run(
+            "INSERT INTO {$this->wrap($this->table)} ($columns) VALUES ($placeholders)",
+            array_map([$this, 'bindable'], array_values($values)),
+        );
 
-        return $this->connection->lastInsertId();
+        try {
+            return $this->connection->lastInsertId();
+        } catch (PDOException) {
+            // PostgreSQL throws when the table has no sequence (no auto-increment id).
+            return false;
+        }
     }
 
     /**
@@ -214,8 +266,9 @@ class QueryBuilder
 
         $set = implode(', ', array_map(fn ($c) => $this->wrap($c) . ' = ?', array_keys($values)));
         $sql = "UPDATE {$this->wrap($this->table)} SET $set " . $this->compileWheres();
+        $values = array_map([$this, 'bindable'], array_values($values));
 
-        return $this->run($sql, [...array_values($values), ...$this->bindings])->rowCount();
+        return $this->run($sql, [...$values, ...$this->bindings])->rowCount();
     }
 
     /**
@@ -240,19 +293,17 @@ class QueryBuilder
 
     public function toSql(): string
     {
-        $columns = implode(', ', array_map(
-            fn ($c) => $c === 'COUNT(*) AS aggregate' ? $c : $this->wrap($c),
-            $this->columns,
-        ));
+        $columns = $this->columns;
 
-        $sql = "SELECT $columns FROM {$this->wrap($this->table)}";
+        // With a join, "*" would let the joined table's columns (e.g. its id)
+        // overwrite the model's own, so only select the model's table.
+        if ($this->model && $this->joins !== [] && $columns === ['*']) {
+            $columns = [$this->table . '.*'];
+        }
 
-        if ($this->joins !== []) {
-            $sql .= ' ' . implode(' ', $this->joins);
-        }
-        if ($this->wheres !== []) {
-            $sql .= ' ' . $this->compileWheres();
-        }
+        $sql = 'SELECT ' . implode(', ', array_map([$this, 'wrapSelect'], $columns))
+            . ' FROM ' . $this->compileFromAndWheres();
+
         if ($this->orders !== []) {
             $sql .= ' ORDER BY ' . implode(', ', $this->orders);
         }
@@ -272,8 +323,19 @@ class QueryBuilder
         return $this->bindings;
     }
 
-    protected function addWhere(string $boolean, bool $shorthand, string $column, mixed $operator, mixed $value): static
+    protected function addWhere(string $boolean, bool $shorthand, string|Closure $column, mixed $operator, mixed $value): static
     {
+        if ($column instanceof Closure) {
+            $nested = new static($this->connection, $this->table);
+            $column($nested);
+
+            if ($nested->wheres !== []) {
+                $this->wheres[] = ['boolean' => $boolean, 'sql' => '(' . $nested->compileConditions() . ')'];
+                array_push($this->bindings, ...$nested->bindings);
+            }
+            return $this;
+        }
+
         if ($shorthand) {
             [$value, $operator] = [$operator, '='];
         }
@@ -291,17 +353,72 @@ class QueryBuilder
         }
 
         $this->wheres[] = ['boolean' => $boolean, 'sql' => $this->wrap($column) . " $operator ?"];
-        $this->bindings[] = is_bool($value) ? (int) $value : $value;
+        $this->bindings[] = $this->bindable($value);
 
         return $this;
     }
 
+    /**
+     * Normalise a value for PDO, rejecting ones that can't be bound.
+     */
+    protected function bindable(mixed $value): mixed
+    {
+        return match (true) {
+            is_bool($value) => (int) $value,
+            $value instanceof \DateTimeInterface => $value->format('Y-m-d H:i:s'),
+            is_array($value), is_object($value) && !method_exists($value, '__toString') => throw new InvalidArgumentException(
+                'Cannot bind a value of type ' . get_debug_type($value) . ' (use whereIn() for lists, or a json cast for arrays).'
+            ),
+            default => $value,
+        };
+    }
+
+    protected function compileFromAndWheres(): string
+    {
+        $sql = $this->wrap($this->table);
+
+        if ($this->joins !== []) {
+            $sql .= ' ' . implode(' ', $this->joins);
+        }
+        if ($this->wheres !== []) {
+            $sql .= ' ' . $this->compileWheres();
+        }
+
+        return $sql;
+    }
+
     protected function compileWheres(): string
     {
-        $sql = '';
-        foreach ($this->wheres as $i => $where) {
-            $sql .= ($i === 0 ? 'WHERE ' : " {$where['boolean']} ") . $where['sql'];
+        return $this->wheres === [] ? '' : 'WHERE ' . $this->compileConditions();
+    }
+
+    /**
+     * Locked wheres are joined with AND; anything added after them is wrapped in
+     * parentheses when needed, so "user_id = ? AND (a = ? OR b = ?)".
+     */
+    protected function compileConditions(): string
+    {
+        $join = function (array $wheres): string {
+            $sql = '';
+            foreach (array_values($wheres) as $i => $where) {
+                $sql .= ($i === 0 ? '' : " {$where['boolean']} ") . $where['sql'];
+            }
+            return $sql;
+        };
+
+        $locked = array_slice($this->wheres, 0, $this->lockedWheres);
+        $rest = array_slice($this->wheres, $this->lockedWheres);
+
+        if ($locked === []) {
+            return $join($rest);
         }
+
+        $sql = implode(' AND ', array_column($locked, 'sql'));
+
+        if ($rest !== []) {
+            $sql .= ' AND ' . (count($rest) > 1 ? '(' . $join($rest) . ')' : $rest[0]['sql']);
+        }
+
         return $sql;
     }
 
@@ -333,6 +450,18 @@ class QueryBuilder
             fn ($part) => $part === '*' ? '*' : $quote . $part . $quote,
             explode('.', $identifier),
         ));
+    }
+
+    /**
+     * Like wrap(), but also accepts "column as alias".
+     */
+    protected function wrapSelect(string $column): string
+    {
+        if (preg_match('/^(.+?)\s+as\s+([A-Za-z_][A-Za-z0-9_]*)$/i', trim($column), $m)) {
+            return $this->wrap($m[1]) . ' AS ' . $this->wrap($m[2]);
+        }
+
+        return $this->wrap($column);
     }
 
     protected function run(string $sql, array $bindings): PDOStatement

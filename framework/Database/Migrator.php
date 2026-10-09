@@ -37,8 +37,10 @@ class Migrator
         $batch = (int) ($this->pdo->query('SELECT MAX(batch) FROM ' . self::TABLE)->fetchColumn() ?: 0) + 1;
 
         foreach ($pending as $name) {
-            $this->load($name)->up();
-            $this->query()->insert(['migration' => $name, 'batch' => $batch]);
+            $this->atomically(function () use ($name, $batch) {
+                $this->load($name)->up();
+                $this->query()->insert(['migration' => $name, 'batch' => $batch]);
+            });
         }
 
         return array_values($pending);
@@ -62,11 +64,35 @@ class Migrator
         );
 
         foreach ($names as $name) {
-            $this->load($name)->down();
-            $this->query()->where('migration', $name)->delete();
+            $this->atomically(function () use ($name) {
+                $this->load($name)->down();
+                $this->query()->where('migration', $name)->delete();
+            });
         }
 
         return $names;
+    }
+
+    /**
+     * SQLite and PostgreSQL can roll back schema changes, so a migration that
+     * fails halfway leaves nothing behind. MySQL commits every DDL statement
+     * immediately, so there a failed migration may need manual cleanup.
+     */
+    private function atomically(\Closure $callback): void
+    {
+        if (Connection::driver($this->pdo) === 'mysql') {
+            $callback();
+            return;
+        }
+
+        $this->pdo->beginTransaction();
+        try {
+            $callback();
+            $this->pdo->commit();
+        } catch (\Throwable $e) {
+            $this->pdo->rollBack();
+            throw $e;
+        }
     }
 
     /**

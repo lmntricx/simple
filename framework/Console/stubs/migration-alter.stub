@@ -1,0 +1,21 @@
+<?php
+
+use Simple\Database\Migration;
+use Simple\Database\Schema\Blueprint;
+use Simple\Database\Schema\Schema;
+
+return new class extends Migration {
+    public function up(): void
+    {
+        Schema::table('{{table}}', function (Blueprint $table) {
+            // $table->string('slug')->nullable();
+        });
+    }
+
+    public function down(): void
+    {
+        Schema::table('{{table}}', function (Blueprint $table) {
+            // $table->dropColumn('slug');
+        });
+    }
+};

@@ -132,10 +132,16 @@ class Kernel
         }
 
         $name = Str::snake($name);
-        $table ??= preg_match('/^create_(\w+)_table$/', $name, $m) ? $m[1] : 'table_name';
         $path = $this->app->basePath . '/database/migrations/' . date('Y_m_d_His') . "_$name.php";
 
-        return $this->write($path, $this->stub('migration', ['{{table}}' => $table]));
+        // create_posts_table => Schema::create; add_slug_to_posts(_table) => Schema::table
+        if ($table !== null || preg_match('/^create_(\w+?)_table$/', $name, $m)) {
+            return $this->write($path, $this->stub('migration', ['{{table}}' => $table ?? $m[1]]));
+        }
+
+        $table = preg_match('/_(?:to|from|in|on)_(\w+?)(?:_table)?$/', $name, $m) ? $m[1] : 'table_name';
+
+        return $this->write($path, $this->stub('migration-alter', ['{{table}}' => $table]));
     }
 
     private function makeModel(?string $name, bool $withMigration): int

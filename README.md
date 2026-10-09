@@ -78,21 +78,33 @@ class Post extends Model
     protected array $casts = ['published' => 'bool', 'meta' => 'array'];
 
     public function author(): ?User { return $this->belongsTo(User::class, 'user_id'); }
+    public function comments(): QueryBuilder { return $this->hasMany(Comment::class); }   // comments.post_id
 }
 
 Post::create([...]);
 Post::find(1);            Post::findOrFail(1);       // 404 if missing
 Post::where('published', true)->where('views', '>', 100)->latest()->paginate(20, $page);
+Post::where('published', true)->where(fn ($q) => $q->where('a', 1)->orWhere('b', 2));   // a AND (b OR c)
 $post->update([...]);     $post->title = 'x'; $post->save();     $post->delete();
-$user->hasMany(Post::class)->get();
+
+$post->author;                        // property: runs the relation once, cached, included in toArray()/JSON
+$post->comments;                      // to-many as a property: array of models
+$post->comments()->latest()->get();   // method: a query you can keep refining
 ```
+
+Relation methods must be public, take no arguments and declare a `Model` or `QueryBuilder` return type to be
+usable as properties. A relation's own constraint can't be widened: `$post->comments()->orWhere(...)` only ever
+returns that post's comments. Relations load lazily (one query per access), so in a loop over many models
+prefer one `whereIn()` query over accessing the relation on each.
+
+Transactions: `Connection::transaction(function () { ... })` commits, or rolls back if the closure throws.
 
 The table name defaults to the snake_case plural of the class (`BlogPost` => `blog_posts`). `created_at`/`updated_at`
 are set automatically (`protected bool $timestamps = false;` to turn off). Define `setXxxAttribute($value)` to
 transform a value before it's stored (see `User::setPasswordAttribute`).
 
 The query builder (`Model::query()`, or `new QueryBuilder($pdo, 'table')` for plain arrays) supports
-`select where orWhere whereNull whereNotNull whereIn join leftJoin orderBy latest limit offset get first find count exists paginate insert update delete raw`.
+`select where orWhere whereNull whereNotNull whereIn whereNotIn join leftJoin orderBy latest limit offset get first find pluck count exists paginate insert update delete raw`.
 Column names are validated, so they can't be used for SQL injection; values are always bound.
 
 ## Migrations
@@ -113,6 +125,25 @@ Schema::create('posts', function (Blueprint $table) {
 Column types: `id integer bigInteger foreignId string text boolean date datetime timestamp decimal float json`.
 Modifiers: `nullable() unique() unsigned() default($v) useCurrent() constrained() cascadeOnDelete() nullOnDelete()`.
 Works on MySQL, PostgreSQL and SQLite.
+
+Change an existing table with `Schema::table()` (`php simple make:migration add_slug_to_posts` generates one):
+
+```php
+Schema::table('posts', function (Blueprint $table) {
+    $table->string('slug')->nullable();   // SQLite: new columns need nullable() or a default()
+    $table->index('slug');
+    $table->dropColumn('legacy');
+});
+```
+
+On SQLite and PostgreSQL each migration runs in a transaction, so a failure leaves nothing half-applied.
+MySQL commits schema changes immediately, so a failed migration there may need manual cleanup.
+
+## Tests
+
+```
+php tests/orm.php
+```
 
 ## Middleware
 

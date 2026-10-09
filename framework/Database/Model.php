@@ -47,6 +47,8 @@ abstract class Model implements JsonSerializable
 
     protected array $attributes = [];
     protected array $original = [];
+    /** Relations loaded through property access ($post->author), included in toArray(). */
+    protected array $relations = [];
     public bool $exists = false;
 
     public function __construct(array $attributes = [])
@@ -143,6 +145,10 @@ abstract class Model implements JsonSerializable
             return true;
         }
 
+        if ($this->getKey() === null) {
+            throw new \LogicException('Cannot update a ' . static::class . " without a [{$this->primaryKey}] value.");
+        }
+
         $dirty = $this->getDirty();
         if ($dirty === []) {
             return true;
@@ -183,6 +189,7 @@ abstract class Model implements JsonSerializable
         $fresh = static::find($this->getKey());
         if ($fresh) {
             $this->attributes = $this->original = $fresh->attributes;
+            $this->relations = [];
         }
         return $this;
     }
@@ -225,10 +232,46 @@ abstract class Model implements JsonSerializable
     public function getAttribute(string $key): mixed
     {
         if (!array_key_exists($key, $this->attributes)) {
-            return null;
+            return $this->getRelationValue($key);
         }
 
         return $this->castGet($key, $this->attributes[$key]);
+    }
+
+    /**
+     * $post->author calls $post->author() once and caches the result; for
+     * to-many relations (returning a QueryBuilder) the rows are fetched.
+     *
+     * Only public, parameterless methods declared on your model whose return
+     * type is a Model or QueryBuilder count as relations.
+     */
+    protected function getRelationValue(string $key): mixed
+    {
+        if (array_key_exists($key, $this->relations)) {
+            return $this->relations[$key];
+        }
+
+        if (!method_exists($this, $key)) {
+            return null;
+        }
+
+        $method = new \ReflectionMethod($this, $key);
+        $type = $method->getReturnType();
+
+        if (
+            $method->getDeclaringClass()->getName() === self::class
+            || !$method->isPublic()
+            || $method->isStatic()
+            || $method->getNumberOfRequiredParameters() > 0
+            || !$type instanceof \ReflectionNamedType
+            || !(is_a($type->getName(), Model::class, true) || is_a($type->getName(), QueryBuilder::class, true))
+        ) {
+            return null;
+        }
+
+        $result = $this->$key();
+
+        return $this->relations[$key] = $result instanceof QueryBuilder ? $result->get() : $result;
     }
 
     public function setAttribute(string $key, mixed $value): void
@@ -261,6 +304,15 @@ abstract class Model implements JsonSerializable
         foreach (array_diff_key($this->attributes, array_flip($this->hidden)) as $key => $value) {
             $array[$key] = $this->castGet($key, $value);
         }
+
+        foreach (array_diff_key($this->relations, array_flip($this->hidden)) as $key => $value) {
+            $array[$key] = match (true) {
+                $value instanceof Model => $value->toArray(),
+                is_array($value) => array_map(fn (Model $m) => $m->toArray(), $value),
+                default => $value,
+            };
+        }
+
         return $array;
     }
 
@@ -315,7 +367,11 @@ abstract class Model implements JsonSerializable
     protected function hasMany(string $related, ?string $foreignKey = null, ?string $localKey = null): QueryBuilder
     {
         $foreignKey ??= $this->foreignKeyName();
-        return $related::query()->where($foreignKey, $this->getAttribute($localKey ?? $this->primaryKey));
+
+        // Locked, so a later ->orWhere() can't widen the query to other owners' rows.
+        return $related::query()
+            ->where($foreignKey, $this->getAttribute($localKey ?? $this->primaryKey))
+            ->lockConstraints();
     }
 
     /**
@@ -365,7 +421,7 @@ abstract class Model implements JsonSerializable
 
     public function __isset(string $key): bool
     {
-        return isset($this->attributes[$key]);
+        return isset($this->attributes[$key]) || $this->getRelationValue($key) !== null;
     }
 
     public function __unset(string $key): void

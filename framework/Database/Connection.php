@@ -36,6 +36,34 @@ final class Connection
         self::$pdos[$name] = $pdo;
     }
 
+    /**
+     * Run $callback in a transaction: committed if it returns, rolled back if it throws.
+     *
+     *   Connection::transaction(function () use ($order) { $order->save(); ... });
+     */
+    public static function transaction(\Closure $callback, ?string $name = null): mixed
+    {
+        $pdo = self::get($name);
+
+        // Already inside a transaction: just join it.
+        if ($pdo->inTransaction()) {
+            return $callback($pdo);
+        }
+
+        $pdo->beginTransaction();
+
+        try {
+            $result = $callback($pdo);
+            $pdo->commit();
+            return $result;
+        } catch (\Throwable $e) {
+            if ($pdo->inTransaction()) {
+                $pdo->rollBack();
+            }
+            throw $e;
+        }
+    }
+
     public static function driver(PDO $pdo): string
     {
         return $pdo->getAttribute(PDO::ATTR_DRIVER_NAME);

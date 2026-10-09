@@ -27,6 +27,27 @@ final class Schema
         }
     }
 
+    /**
+     * Alter an existing table:
+     *   Schema::table('posts', function (Blueprint $table) {
+     *       $table->string('slug')->nullable();
+     *       $table->dropColumn('legacy_field');
+     *   });
+     *
+     * SQLite can't add a NOT NULL column without a default, so make new columns
+     * nullable() or give them a default().
+     */
+    public static function table(string $table, Closure $callback, ?PDO $pdo = null): void
+    {
+        $pdo ??= Connection::get();
+        $blueprint = new Blueprint($table, altering: true);
+        $callback($blueprint);
+
+        foreach ($blueprint->toSql(Connection::driver($pdo)) as $statement) {
+            $pdo->exec($statement);
+        }
+    }
+
     public static function dropIfExists(string $table, ?PDO $pdo = null): void
     {
         $pdo ??= Connection::get();

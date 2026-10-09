@@ -107,7 +107,7 @@ class Column
         if ($this->useCurrent) {
             $sql .= ' DEFAULT CURRENT_TIMESTAMP';
         } elseif ($this->hasDefault) {
-            $sql .= ' DEFAULT ' . $this->defaultSql();
+            $sql .= ' DEFAULT ' . $this->defaultSql($driver);
         }
 
         if ($this->unique) {
@@ -142,13 +142,19 @@ class Column
         };
     }
 
-    protected function defaultSql(): string
+    protected function defaultSql(string $driver): string
     {
+        // PostgreSQL BOOLEAN columns reject 0/1 as defaults.
+        $default = $this->type === 'boolean' && $driver === 'pgsql' && !is_string($this->default) && $this->default !== null
+            ? (bool) $this->default
+            : $this->default;
+
         return match (true) {
-            $this->default === null => 'NULL',
-            is_bool($this->default) => $this->default ? '1' : '0',
-            is_int($this->default), is_float($this->default) => (string) $this->default,
-            default => "'" . str_replace("'", "''", (string) $this->default) . "'",
+            $default === null => 'NULL',
+            is_bool($default) && $driver === 'pgsql' => $default ? 'TRUE' : 'FALSE',
+            is_bool($default) => $default ? '1' : '0',
+            is_int($default), is_float($default) => (string) $default,
+            default => "'" . str_replace("'", "''", (string) $default) . "'",
         };
     }
 }
