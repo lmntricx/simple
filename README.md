@@ -69,6 +69,30 @@ Request: `input()`, `all()`, `only([...])`, `except([...])`, `query()`, `header(
 
 Failures return a 422 with `{"errors": {"field": ["message"]}}`.
 
+## Dependency injection
+
+Controllers and middleware are built by the container, so they can ask for what they need in their constructor
+or action. Classes are built automatically from their type hints; route parameters are matched by name.
+
+```php
+class InvoiceController
+{
+    public function __construct(private InvoiceService $invoices) {}
+
+    public function show(Request $request, string $id, PdfRenderer $pdf): Response { ... }
+}
+```
+
+Tell the container about interfaces and configured services in `app/Providers/AppServiceProvider.php`:
+
+```php
+$this->app->singleton(PaymentGateway::class, fn () => new StripeGateway(config('services.stripe.key')));
+$this->app->bind(Clock::class, SystemClock::class);
+```
+
+`app()` is the container: `app(InvoiceService::class)`, `app()->make(...)`, `app()->call(...)`. The current
+request is available as `app(Request::class)`. In tests, swap an implementation with `$this->app->instance(...)`.
+
 ## Models
 
 ```php

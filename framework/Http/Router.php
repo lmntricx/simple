@@ -4,6 +4,7 @@ namespace Simple\Http;
 
 use Closure;
 use LogicException;
+use Simple\Container\Container;
 
 class Router
 {
@@ -11,6 +12,15 @@ class Router
     protected array $routes = [];
     protected array $groupStack = [];
     protected array $aliases = [];
+    protected Container $container;
+
+    /**
+     * @param Container|null $container builds controllers and middleware, injecting their dependencies
+     */
+    public function __construct(?Container $container = null)
+    {
+        $this->container = $container ?? new Container();
+    }
 
     public function get(string $uri, Closure|array $action): Route
     {
@@ -118,6 +128,7 @@ class Router
                 $route->getMiddleware(),
                 fn (Request $request) => $this->call($route, $request, $params),
                 $this->aliases,
+                $this->container,
             );
         }
 
@@ -130,8 +141,11 @@ class Router
     }
 
     /**
-     * Controllers receive the Request first, then route parameters in order:
-     *   public function show(Request $request, string $id)
+     * Controllers are built by the container (so their constructors can ask for
+     * services), and actions get their parameters injected:
+     *   public function show(Request $request, string $id, ReportService $reports)
+     * Route parameters are matched by name (then by position), the Request and
+     * other classes by type.
      */
     protected function call(Route $route, Request $request, array $params): mixed
     {
@@ -147,9 +161,9 @@ class Router
                 throw new LogicException("Method [$class::$method] not found for route {$route->method} {$route->uri}.");
             }
 
-            $action = [new $class(), $method];
+            $action = [$this->container->make($class), $method];
         }
 
-        return $action($request, ...array_values($params));
+        return $this->container->call($action, [$request, ...$params]);
     }
 }

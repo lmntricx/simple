@@ -12,9 +12,14 @@ if (!function_exists('env')) {
 }
 
 if (!function_exists('app')) {
-    function app(): Application
+    /**
+     * app() returns the application (the container); app(Foo::class) builds/fetches a Foo.
+     */
+    function app(?string $abstract = null, array $parameters = []): mixed
     {
-        return Application::getInstance();
+        $app = Application::getInstance();
+
+        return $abstract === null ? $app : $app->make($abstract, $parameters);
     }
 }
 

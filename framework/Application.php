@@ -5,6 +5,7 @@ namespace Simple;
 use ErrorException;
 use LogicException;
 use Simple\Auth\Auth;
+use Simple\Container\Container;
 use Simple\Database\Connection;
 use Simple\Http\HttpException;
 use Simple\Http\Pipeline;
@@ -17,7 +18,10 @@ use Simple\Support\Env;
 use Simple\Support\Log;
 use Throwable;
 
-class Application
+/**
+ * The application is also the service container: app()->make(...), app()->singleton(...).
+ */
+class Application extends Container
 {
     public const VERSION = '2.0.0';
 
@@ -44,12 +48,32 @@ class Application
         Connection::configure($this->config->get('database', []));
         TrustedProxies::set($this->config->get('app.trusted_proxies', []));
 
-        $this->router = new Router();
+        $this->instance(self::class, $this);
+        $this->instance(Container::class, $this);
+        $this->instance(Config::class, $this->config);
+
+        $this->router = $this->instance(Router::class, new Router($this));
         foreach ($this->config->get('app.middleware_aliases', []) as $name => $class) {
             $this->router->aliasMiddleware($name, $class);
         }
 
         $this->registerErrorHandling();
+        $this->registerProviders();
+    }
+
+    private function registerProviders(): void
+    {
+        $providers = array_map(
+            fn (string $class) => new $class($this),
+            $this->config->get('app.providers', []),
+        );
+
+        foreach ($providers as $provider) {
+            $provider->register();
+        }
+        foreach ($providers as $provider) {
+            $provider->boot();
+        }
     }
 
     public static function getInstance(): self
@@ -75,6 +99,7 @@ class Application
     public function handle(Request $request): Response
     {
         Auth::forget();
+        $this->instance(Request::class, $request);
 
         try {
             return Pipeline::run(
@@ -89,6 +114,7 @@ class Application
                     }
                 },
                 $this->router->middlewareAliases(),
+                $this,
             );
         } catch (Throwable $e) {
             return $this->renderException($e);

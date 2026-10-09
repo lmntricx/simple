@@ -24,6 +24,11 @@ return [
     // Prefix for every route in routes/api.php, e.g. "api" => /api/users
     'route_prefix' => env('APP_ROUTE_PREFIX', ''),
 
+    // Register services with the container (see app/Providers/AppServiceProvider.php).
+    'providers' => [
+        App\Providers\AppServiceProvider::class,
+    ],
+
     // Run on every request, in order.
     'middleware' => [
         Simple\Http\Middleware\Cors::class,

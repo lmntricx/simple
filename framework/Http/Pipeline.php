@@ -4,6 +4,7 @@ namespace Simple\Http;
 
 use Closure;
 use InvalidArgumentException;
+use Simple\Container\Container;
 
 final class Pipeline
 {
@@ -13,15 +14,21 @@ final class Pipeline
      * @param array<string|Middleware> $middleware class names, aliases or instances;
      *        "name:a,b" passes "a" and "b" to the middleware's constructor
      * @param array<string, string> $aliases short name => class name
+     * @param Container|null $container builds middleware (so they can have dependencies)
      */
-    public static function run(Request $request, array $middleware, Closure $destination, array $aliases = []): Response
-    {
+    public static function run(
+        Request $request,
+        array $middleware,
+        Closure $destination,
+        array $aliases = [],
+        ?Container $container = null,
+    ): Response {
         $core = fn (Request $request): Response => Response::from($destination($request));
 
         $chain = array_reduce(
             array_reverse($middleware),
-            fn (Closure $next, string|Middleware $item) => function (Request $request) use ($next, $item, $aliases): Response {
-                return self::resolve($item, $aliases)->handle($request, $next);
+            fn (Closure $next, string|Middleware $item) => function (Request $request) use ($next, $item, $aliases, $container): Response {
+                return self::resolve($item, $aliases, $container)->handle($request, $next);
             },
             $core,
         );
@@ -29,7 +36,7 @@ final class Pipeline
         return $chain($request);
     }
 
-    private static function resolve(string|Middleware $item, array $aliases): Middleware
+    private static function resolve(string|Middleware $item, array $aliases, ?Container $container): Middleware
     {
         if ($item instanceof Middleware) {
             return $item;
@@ -42,6 +49,8 @@ final class Pipeline
             throw new InvalidArgumentException("Middleware [$item] does not exist or does not implement " . Middleware::class);
         }
 
-        return new $class(...($params === null || $params === '' ? [] : explode(',', $params)));
+        $params = $params === null || $params === '' ? [] : explode(',', $params);
+
+        return ($container ?? new Container())->make($class, $params);
     }
 }
